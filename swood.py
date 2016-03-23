@@ -1,4 +1,3 @@
-from scipy.io import wavfile
 import scipy.ndimage
 import progressbar
 import numpy as np
@@ -12,22 +11,48 @@ import sys
 
 pyfftw.interfaces.cache.enable()
 
-CHUNK_SIZE = 8192
+CHUNK_SIZE = 4096
 FINAL_SAMPLE_RATE = 44100
 
-def get_fft(wav, pbar=True):
-    spacing = float(orig.getframerate()) / CHUNK_SIZE
-    avgdata = np.array([0]*((CHUNK_SIZE // 2) - 0), dtype="float64")
+def load_wav(filename, new_sr):
+    with wave.open(filename, "r") as wavfile:
+        sw = wavfile.getsampwidth()
+        dither = False
+        offset = 0
+        size = None
+        if sw == 1:
+            dtype=np.uint8
+            offset = 127
+        elif sw == 2:
+            dtype=np.uint16
+            offset = 32767
+        elif sw == 3 or sw == 4:
+            dtype=np.uint32
+            offset = 2147483647
+        else:
+            dtype=np.uint32
+            offset = 2147483647
+            dither = True
+        wav = np.zeros(wavfile.getnframes(), dtype=size)
+        if dither:
+            for i in range(0,wavfile.getnframes()):
+                wav[i] = (int.from_bytes(wavfile.readframes(1)[:sw], byteorder="little", signed=True) / 4294967297) + offset # 64-bit uint to 32-bit
+        else:
+            for i in range(0,wavfile.getnframes()):
+                wav[i] = int.from_bytes(wavfile.readframes(1)[:sw], byteorder="little", signed=True) + offset
+        wav -= wav.min()
+        return (wav, wavfile.getframerate(), offset, size)
+
+def get_fft(orig, pbar=True):
+    spacing = float(orig[1]) / CHUNK_SIZE
+    avgdata = np.array([0]*((CHUNK_SIZE // 2)), dtype="float64")
     c = None
+    offset = None
     bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
-    for _ in bar(range(math.ceil(wav.getnframes() / CHUNK_SIZE))) if pbar else range(math.ceil(wav.getnframes() / CHUNK_SIZE)):
-        frames = orig.readframes(CHUNK_SIZE)
-        if not c:
-            c = len(frames)
-        if len(frames) != c:
+    for i in range(0,len(orig[0]),CHUNK_SIZE):
+        data = np.array(orig[0][i:i+CHUNK_SIZE], dtype=orig[3])
+        if len(data) != 4096:
             break
-        data = np.array([f - 128 for f in frames], dtype=np.int8)
-        del frames
         fft = pyfftw.interfaces.numpy_fft.fft(data)
         fft = np.abs(fft[:CHUNK_SIZE/2])
         avgdata += fft
@@ -51,62 +76,69 @@ def plot_fft(fft):
     plt.title("FFT Analysis")
     plt.show(1)
 
+def plot_wav(wav):
+    import matplotlib.pyplot as plt
+    plot = plt.figure(1)
+    plt.plot(range(len(wav)), wav, "r")
+    plt.title = "Audio File Waveform"
+    plt.show(1)
+
 def parse_midi(midipath, ffreq):
     results = collections.defaultdict(lambda: [])
     notes = collections.defaultdict(lambda: [])
     with mido.MidiFile(midipath) as mid:
         curtime = 0
+        lasttime = 0
         for message in mid: #note_to_freq(message.note) / ffreq
             curtime += message.time
             if "channel" in message.__dict__ and message.channel != 0: continue
             if message.type == "note_on":
                 notes[message.note].append(curtime)
+                lasttime = curtime
             elif message.type == "note_off":
-                results[notes[message.note][0]].append((int((curtime - notes[message.note][0])*FINAL_SAMPLE_RATE), note_to_freq(message.note) / ffreq))
+                results[notes[message.note][0]].append((int((curtime - notes[message.note][0])*FINAL_SAMPLE_RATE), ffreq / note_to_freq(message.note)))
                 notes[message.note].pop(0)
+                lasttime = curtime
         for time, nlist in notes.items():
             for note in nlist:
-                results[time].append((int((curtime - time)*FINAL_SAMPLE_RATE), note_to_freq(note) / ffreq))
-        for k in results.keys():
-            results[k] = results[k]
-        return ([(int(round(k*FINAL_SAMPLE_RATE)),results[k]) for k in sorted(results.keys())], curtime)
+                results[time].append((int((curtime - time)*FINAL_SAMPLE_RATE), ffreq / note_to_freq(note)))
+        return ([(int(round(k*FINAL_SAMPLE_RATE)),results[k]) for k in sorted(results.keys())], lasttime)
 
 ffreq = None
 
-with wave.open(sys.argv[1] if len(sys.argv) > 1 else "440.wav") as orig:
-    print("Analyzing sound clip...")
-    fft = get_fft(orig)
-    ffreq = get_max_freq(fft)
-    print("Fundamental Frequency: {} Hz".format(ffreq))
-    del fft
-    print("Loading sound clip into memory...")
-    effect = wavfile.read(sys.argv[1] if len(sys.argv) > 1 else "440.wav")[1]
-    effect += abs(effect.min())
-    if len(effect.shape) > 1:
-        print("Muxing stereo audio down to mono.")
-        effect = np.average(effect, axis=1)
-    effect = np.divide(effect, effect.max() / 255)
-    effect = effect.astype(np.uint8)
-    print("Parsing MIDI...")
-    notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "swood.mid", ffreq)
-    output = np.array([-1]*(int(FINAL_SAMPLE_RATE*midi_length) + 1), dtype=np.int32)
-    maxnotes = 0
-    for time, notes in notelist:
-        maxnotes += len(notes)
-    print("Rendering audio...")
-    bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()], max_value=maxnotes)
-    c = 0
-    for time, notes in notelist:
-        for note in notes:
-            output[time:time+note[0]] += effect[:note[0]] #scipy.ndimage.zoom(effect, note[1])
-            c += 1
-            bar.update(c)
-        pass
-    #output[output == -1] = max(output) / 2
-    output = np.round(output * (255 / max(output))).astype(np.uint8)
-    with wave.open(sys.argv[3] if len(sys.argv) > 3 else "out.wav", "w") as outwav:
-        outwav.setframerate(FINAL_SAMPLE_RATE)
-        outwav.setnchannels(1)
-        outwav.setsampwidth(1)
-        outwav.setnframes(len(output))
-        outwav.writeframesraw(output)
+print("Loading sound clip into memory...")
+orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "440.wav", FINAL_SAMPLE_RATE)
+print("Analyzing sound clip...")
+ffreq = get_max_freq(get_fft(orig))
+print("Fundamental Frequency: {} Hz".format(ffreq))
+if orig[1] != FINAL_SAMPLE_RATE:
+    print("Scaling to the right sample rate.")
+    wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
+print("Parsing MIDI...")
+notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "swood.mid", ffreq)
+output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1), dtype=np.float64)
+mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
+maxnotes = 0
+for time, notes in notelist:
+    maxnotes += len(notes)
+print("Rendering audio...")
+bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()], max_value=maxnotes)
+c = 0
+for time, notes in notelist:
+    for note in notes:
+        output[time:time+note[0]] += scipy.ndimage.zoom(orig[0], note[1])[:note[0]].astype(np.uint32)
+        mask[time:time+note[0]] = 1
+        c += 1
+        bar.update(c)
+    pass
+output[mask == 0] += ((output.max() + output.min()) / 2)
+output -= output.min()
+output *= (4294967295 / output.max())
+output -= ((output.max() + output.min()) / 2)
+output = output.astype(np.int32)
+with wave.open(sys.argv[3] if len(sys.argv) > 3 else "out.wav", "w") as outwav:
+    outwav.setframerate(FINAL_SAMPLE_RATE)
+    outwav.setnchannels(1)
+    outwav.setsampwidth(4)
+    outwav.setnframes(len(output))
+    outwav.writeframesraw(output)
