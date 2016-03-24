@@ -119,18 +119,21 @@ notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "badtim
 output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1), dtype=np.float64)
 mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
 maxnotes = 0
+threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
 for time, notes in notelist:
     maxnotes += len(notes)
 print("Rendering audio...")
-bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()], max_value=maxnotes)
+bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ETA ", progressbar.ETA()], max_value=maxnotes)
 c = 0
 for time, notes in notelist:
     for note in notes:
-        output[time:time+note[0]] += scipy.ndimage.zoom(orig[0], note[1])[:note[0]]
+        scaled = scipy.ndimage.zoom(orig[0], note[1])[:note[0] + threshold]
+        avg = (scaled.max() + scaled.min()) / 2
+        cutoff = np.argmin([abs(i-avg)+(d*20) for d, i in enumerate(scaled[note[0]:])])
+        output[time:time+note[0]+cutoff] += scaled[:note[0]+cutoff]
         mask[time:time+note[0]] = 1
         c += 1
         bar.update(c)
-    pass
 output[mask == 0] += ((output.max() + output.min()) / 2)
 output -= output.min()
 output *= (4294967295 / output.max())
