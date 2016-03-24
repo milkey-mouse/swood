@@ -125,7 +125,7 @@ def hash_array(arr):
 ffreq = None
 
 print("Loading sound clip into memory...")
-orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "doot.wav", FINAL_SAMPLE_RATE)
+orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "meme.wav", FINAL_SAMPLE_RATE)
 print("Analyzing sound clip...")
 ffreq = get_max_freq(get_fft(orig))
 print("Fundamental Frequency: {} Hz".format(ffreq))
@@ -134,7 +134,7 @@ if orig[1] != FINAL_SAMPLE_RATE:
     wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
 print("Parsing MIDI...")
 threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
-notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "cltcl.mid", ffreq)
+notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "dsmn.mid", ffreq)
 output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1 + threshold), dtype=np.float64)
 mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
 maxnotes = 0
