@@ -134,14 +134,14 @@ if orig[1] != FINAL_SAMPLE_RATE:
     wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
 print("Parsing MIDI...")
 threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
-notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "dsmn.mid", ffreq)
+notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "cltcl.mid", ffreq)
 output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1 + threshold), dtype=np.float64)
 mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
 maxnotes = 0
 for time, notes in notelist:
     maxnotes += len(notes)
 print("Rendering audio...")
-bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ETA ", progressbar.ETA()], max_value=maxnotes)
+bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=maxnotes)
 c = 0
 tick = 10
 for time, notes in notelist:
