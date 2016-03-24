@@ -91,7 +91,7 @@ def parse_midi(midipath, ffreq):
         lasttime = 0
         for message in mid: #note_to_freq(message.note) / ffreq
             curtime += message.time
-            if "channel" in message.__dict__ and message.channel != 0: continue
+            if "channel" in message.__dict__ and message.channel == 10: continue #channel 10 is reserved for percussion
             if message.type == "note_on":
                 notes[message.note].append(curtime)
                 lasttime = curtime
@@ -115,7 +115,7 @@ if orig[1] != FINAL_SAMPLE_RATE:
     print("Scaling to the right sample rate.")
     wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
 print("Parsing MIDI...")
-notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "swood.mid", ffreq)
+notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "badtime.mid", ffreq)
 output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1), dtype=np.float64)
 mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
 maxnotes = 0
@@ -126,7 +126,7 @@ bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressba
 c = 0
 for time, notes in notelist:
     for note in notes:
-        output[time:time+note[0]] += scipy.ndimage.zoom(orig[0], note[1])[:note[0]].astype(np.uint32)
+        output[time:time+note[0]] += scipy.ndimage.zoom(orig[0], note[1])[:note[0]]
         mask[time:time+note[0]] = 1
         c += 1
         bar.update(c)
