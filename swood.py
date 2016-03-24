@@ -11,109 +11,109 @@ import sys
 
 pyfftw.interfaces.cache.enable()
 
-CHUNK_SIZE = 4096
+CHUNK_SIZE = 8192
 FINAL_SAMPLE_RATE = 44100
 
-def load_wav(filename, new_sr):
-    with wave.open(filename, "r") as wavfile:
-        sw = wavfile.getsampwidth()
-        dither = False
-        offset = 0
-        size = None
-        if sw == 1:
-            dtype=np.uint8
-            offset = 127
-        elif sw == 2:
-            dtype=np.uint16
-            offset = 32767
-        elif sw == 3 or sw == 4:
-            dtype=np.uint32
-            offset = 2147483647
-        else:
-            dtype=np.uint32
-            offset = 2147483647
-            dither = True
-        wav = np.zeros(wavfile.getnframes(), dtype=size)
-        if dither:
-            for i in range(0,wavfile.getnframes()):
-                wav[i] = (int.from_bytes(wavfile.readframes(1)[:sw], byteorder="little", signed=True) / 4294967297) + offset # 64-bit uint to 32-bit
-        else:
-            for i in range(0,wavfile.getnframes()):
-                wav[i] = int.from_bytes(wavfile.readframes(1)[:sw], byteorder="little", signed=True) + offset
-        wav -= wav.min()
-        return (wav, wavfile.getframerate(), offset, size)
+class WavFFT(object):
+    def __init__(self, filename):
+        with wave.open(filename, "r") as wavfile:
+            self.sampwidth = wavfile.getsampwidth()
+            self.framerate = wavfile.getframerate()
+            self.offset = offset = int(max(2**(8*self.sampwidth)/2, 2147483647))  # max 32 bit
+            self.size = np.uint32
+            self.fft = False
+            dither = False
+            if self.sampwidth == 1:
+                self.size=np.uint8
+            elif self.sampwidth == 2:
+                self.size=np.uint16
+            self.wav = np.zeros(wavfile.getnframes(), dtype=self.size)
+            if self.sampwidth > 4:
+                for i in range(0,wavfile.getnframes()):
+                    self.wav[i] = (int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True) / 2**32) # 64-bit uint to 32-bit
+            else:
+                for i in range(0,wavfile.getnframes()):
+                    self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
 
-def get_fft(orig, pbar=True):
-    spacing = float(orig[1]) / CHUNK_SIZE
-    avgdata = np.array([0]*((CHUNK_SIZE // 2)), dtype="float64")
-    c = None
-    offset = None
-    bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
-    for i in range(0,len(orig[0]),CHUNK_SIZE):
-        data = np.array(orig[0][i:i+CHUNK_SIZE], dtype=orig[3])
-        if len(data) != 4096:
-            break
-        fft = pyfftw.interfaces.numpy_fft.fft(data)
-        fft = np.abs(fft[:CHUNK_SIZE/2])
-        avgdata += fft
-        del data
-        del fft
-    return (avgdata, spacing)
+    def get_fft(self, pbar=True):
+        if not self.fft:
+            spacing = float(self.framerate) / CHUNK_SIZE
+            avgdata = np.array([0]*((CHUNK_SIZE // 2)), dtype="float64")
+            c = None
+            offset = None
+            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
+            for i in range(0,len(self.wav),CHUNK_SIZE):
+                data = np.array([i+self.offset for i in self.wav[i:i+CHUNK_SIZE]], dtype=self.size)
+                data += self.offset
+                if len(data) != 4096:
+                    break
+                fft = pyfftw.interfaces.numpy_fft.fft(data)
+                fft = np.abs(fft[:CHUNK_SIZE/2])
+                avgdata += fft
+                del data
+                del fft
+            self.fft = (avgdata, spacing)
+        return self.fft
 
-def get_max_freq(fft):
-    return (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
+    def plot_wav(self):
+        import matplotlib.pyplot as plt
+        plot = plt.figure(1)
+        plt.plot(range(len(self.wav)), self.wav, "r")
+        plt.xlabel("Amplitude")
+        plt.ylabel("Time")
+        plt.title("Audio File Waveform")
+        plt.show(1)
 
-def note_to_freq(notenum):
-    #https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
-    return (2.0**((notenum-69)/12.0)) * 440.0
+    def plot_fft(self):
+        import matplotlib.pyplot as plt
+        plot = plt.figure(1)
+        plt.plot([(i*self.fft[1])+self.fft[1] for i in range(len(self.fft[0][1:1000//self.fft[1]]))], list(fft[0][1:1000//self.fft[1]]), "r")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Intensity (abs(fft[freq]))")
+        plt.title("FFT Analysis")
+        plt.show(1)
 
-def plot_fft(fft):
-    import matplotlib.pyplot as plt
-    plot = plt.figure(1)
-    plt.plot([(i*fft[1])+fft[1] for i in range(len(fft[0][1:1000//fft[1]]))], list(fft[0][1:1000//fft[1]]), "r")
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Intensity (abs(fft[freq]))")
-    plt.title("FFT Analysis")
-    plt.show(1)
+    def get_max_freq(self):
+        fft = self.get_fft()
+        return (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
 
-def plot_wav(wav):
-    import matplotlib.pyplot as plt
-    plot = plt.figure(1)
-    plt.plot(range(len(wav)), wav, "r")
-    plt.title = "Audio File Waveform"
-    plt.show(1)
-
-def parse_midi(midipath, ffreq):
-    results = collections.defaultdict(lambda: [])
-    notes = collections.defaultdict(lambda: [])
-    with mido.MidiFile(midipath) as mid:
-        curtime = 0
-        lasttime = 0
-        for message in mid: #note_to_freq(message.note) / ffreq
-            curtime += message.time
-            if "channel" in message.__dict__ and message.channel == 10: continue #channel 10 is reserved for percussion
-            if message.type == "note_on":
-                notes[message.note].append(curtime)
-                lasttime = curtime
-            elif message.type == "note_off":
-                results[notes[message.note][0]].append((int((curtime - notes[message.note][0])*FINAL_SAMPLE_RATE), ffreq / note_to_freq(message.note)))
-                notes[message.note].pop(0)
-                lasttime = curtime
-        for time, nlist in notes.items():
-            for note in nlist:
-                results[time].append((int((curtime - time)*FINAL_SAMPLE_RATE), ffreq / note_to_freq(note)))
-        return ([(int(round(k*FINAL_SAMPLE_RATE)),results[k]) for k in sorted(results.keys())], lasttime)
+class MIDIParser(object):
+    def __init__(self, path, orig_freq):
+        results = collections.defaultdict(lambda: [])
+        notes = collections.defaultdict(lambda: [])
+        self.notecount = 0
+        with mido.MidiFile(path, "r") as mid:
+            time = 0
+            for message in mid:
+                time += message.time
+                if "channel" in message.__dict__ and message.channel == 10: continue  # channel 10 is reserved for percussion
+                if message.type == "note_on":
+                    notes[message.note].append(time)
+                elif message.type == "note_off":
+                    results[int(round(notes[message.note][0]*FINAL_SAMPLE_RATE))].append((int(time - notes[message.note][0]) * FINAL_SAMPLE_RATE, orig_freq / self.note_to_freq(message.note)))
+                    notes[message.note].pop(0)
+                    self.notecount += 1
+            for ntime, nlist in notes.items():
+                for note in nlist:
+                    results[int(round(notes[note][0]*FINAL_SAMPLE_RATE))].append((int(ntime - time) * FINAL_SAMPLE_RATE, orig_freq / self.note_to_freq(note)))
+                    self.notecount += 1
+            self.notes = sorted(results.items())
+            self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
+    
+    def note_to_freq(self, notenum):
+        # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
+        return (2.0**((notenum-69)/12.0)) * 440.0
 
 notecache = {}
+threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
 
 def render_note(note, orig, threshold):
-    scaled = scipy.ndimage.zoom(orig[0], note[1])
+    scaled = scipy.ndimage.zoom(orig.wav, note[1])
     if len(scaled) < note[0] + threshold:
         return scaled
     else:
         scaled = scaled[:note[0] + threshold]
-        avg = (scaled.max() + scaled.min()) / 2
-        cutoff = np.argmin([abs(i-avg)+(d*20) for d, i in enumerate(scaled[note[0]:])])
+        cutoff = np.argmin([abs(i)+(d*20) for d, i in enumerate(scaled[note[0]:])])
         return scaled[:note[0]+cutoff]
 
 def hash_array(arr):
@@ -125,39 +125,33 @@ def hash_array(arr):
 ffreq = None
 
 print("Loading sound clip into memory...")
-orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "meme.wav", FINAL_SAMPLE_RATE)
+orig = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav")
 print("Analyzing sound clip...")
-ffreq = get_max_freq(get_fft(orig))
+ffreq = orig.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
-if orig[1] != FINAL_SAMPLE_RATE:
+if orig.framerate != FINAL_SAMPLE_RATE:
     print("Scaling to the right sample rate.")
-    wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
+    wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig.framerate)
 print("Parsing MIDI...")
-threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
-notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "badtime.mid", ffreq)
-output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1 + threshold), dtype=np.float64)
-mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
-maxnotes = 0
-for time, notes in notelist:
-    maxnotes += len(notes)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "badtime.MID", ffreq)
 print("Rendering audio...")
-bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=maxnotes)
+output = np.empty(midi.length + 1 + threshold, dtype=np.int64)
+output.fill(orig.offset)
+maxnotes = 0
+bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
 c = 0
 tick = 10
-for time, notes in notelist:
+for time, notes in midi.notes:
     for note in notes:
         if note in notecache:
             sbl = len(notecache[note][2])
             output[time:time+sbl] += notecache[note][2]
-            mask[time:time+note[0]] = 1
             notecache[note] = (notecache[note][0] + 1, notecache[note][1], notecache[note][2])
         else:
             rendered = render_note(note, orig, threshold)
-            #rendered -= rendered.min()
             sbl = len(rendered)
             notecache[note] = (1, time, rendered)
             output[time:time+sbl] += rendered
-            mask[time:time+sbl] = 1
         c += 1
         bar.update(c)
     tick -= 1
@@ -166,7 +160,6 @@ for time, notes in notelist:
         for k in list(notecache.keys()):
             if (time - notecache[k][1]) > (7.5*FINAL_SAMPLE_RATE) and notecache[k][0] <= 2:
                 del notecache[k]
-output[mask == 0] += ((output.max() + output.min()) / 2)
 output -= output.min()
 output *= (4294967295 / output.max())
 output -= ((output.max() + output.min()) / 2)
