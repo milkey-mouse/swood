@@ -104,10 +104,28 @@ def parse_midi(midipath, ffreq):
                 results[time].append((int((curtime - time)*FINAL_SAMPLE_RATE), ffreq / note_to_freq(note)))
         return ([(int(round(k*FINAL_SAMPLE_RATE)),results[k]) for k in sorted(results.keys())], lasttime)
 
+notecache = {}
+
+def render_note(note, orig, threshold):
+    scaled = scipy.ndimage.zoom(orig[0], note[1])
+    if len(scaled) < note[0] + threshold:
+        return scaled
+    else:
+        scaled = scaled[:note[0] + threshold]
+        avg = (scaled.max() + scaled.min()) / 2
+        cutoff = np.argmin([abs(i-avg)+(d*20) for d, i in enumerate(scaled[note[0]:])])
+        return scaled[:note[0]+cutoff]
+
+def hash_array(arr):
+    arr.flags.writeable = False
+    result = hash(arr.data)
+    arr.flags.writeable = True
+    return result
+
 ffreq = None
 
 print("Loading sound clip into memory...")
-orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "440.wav", FINAL_SAMPLE_RATE)
+orig = load_wav(sys.argv[1] if len(sys.argv) > 1 else "doot.wav", FINAL_SAMPLE_RATE)
 print("Analyzing sound clip...")
 ffreq = get_max_freq(get_fft(orig))
 print("Fundamental Frequency: {} Hz".format(ffreq))
@@ -115,25 +133,39 @@ if orig[1] != FINAL_SAMPLE_RATE:
     print("Scaling to the right sample rate.")
     wavfile = scipy.ndimage.zoom(effect, FINAL_SAMPLE_RATE / orig[1])
 print("Parsing MIDI...")
-notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "badtime.mid", ffreq)
-output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1), dtype=np.float64)
+threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
+notelist, midi_length = parse_midi(sys.argv[2] if len(sys.argv) > 2 else "dsmn.mid", ffreq)
+output = np.array([0]*(int(FINAL_SAMPLE_RATE*midi_length) + 1 + threshold), dtype=np.float64)
 mask = np.zeros_like(output, dtype=np.uint8) # np.bool_ isn't actually any cheaper
 maxnotes = 0
-threshold = int(float(FINAL_SAMPLE_RATE) * 0.075)
 for time, notes in notelist:
     maxnotes += len(notes)
 print("Rendering audio...")
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ETA ", progressbar.ETA()], max_value=maxnotes)
 c = 0
+tick = 10
 for time, notes in notelist:
     for note in notes:
-        scaled = scipy.ndimage.zoom(orig[0], note[1])[:note[0] + threshold]
-        avg = (scaled.max() + scaled.min()) / 2
-        cutoff = np.argmin([abs(i-avg)+(d*20) for d, i in enumerate(scaled[note[0]:])])
-        output[time:time+note[0]+cutoff] += scaled[:note[0]+cutoff]
-        mask[time:time+note[0]] = 1
+        if note in notecache:
+            sbl = len(notecache[note][2])
+            output[time:time+sbl] += notecache[note][2]
+            mask[time:time+note[0]] = 1
+            notecache[note] = (notecache[note][0] + 1, notecache[note][1], notecache[note][2])
+        else:
+            rendered = render_note(note, orig, threshold)
+            #rendered -= rendered.min()
+            sbl = len(rendered)
+            notecache[note] = (1, time, rendered)
+            output[time:time+sbl] += rendered
+            mask[time:time+sbl] = 1
         c += 1
         bar.update(c)
+    tick -= 1
+    if tick == 0:
+        tick = 10
+        for k in list(notecache.keys()):
+            if (time - notecache[k][1]) > (7.5*FINAL_SAMPLE_RATE) and notecache[k][0] <= 2:
+                del notecache[k]
 output[mask == 0] += ((output.max() + output.min()) / 2)
 output -= output.min()
 output *= (4294967295 / output.max())
