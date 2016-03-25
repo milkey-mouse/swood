@@ -11,14 +11,13 @@ import sys
 
 pyfftw.interfaces.cache.enable()
 
-CHUNK_SIZE = 8192
-
 class WavFFT(object):
-    def __init__(self, filename):
+    def __init__(self, filename, chunksize):
         with wave.open(filename, "r") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
-            self.offset = int(2**(8*self.sampwidth)/2)  # max 32 bit
+            self.chunksize = chunksize
+            self.offset = int(2**(8*max(self.sampwidth, 4))/2) #max 32-bit
             self.size = np.int32
             self.fft = None
             self.maxfreq = None
@@ -38,21 +37,25 @@ class WavFFT(object):
 
     def get_fft(self, pbar=True):
         if not self.fft:
-            spacing = float(self.framerate) / CHUNK_SIZE
-            avgdata = np.array([0]*((CHUNK_SIZE // 2)), dtype=np.float64)
+            spacing = float(self.framerate) / self.chunksize
+            avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
             c = None
             offset = None
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
-            for i in range(0,len(self.wav),CHUNK_SIZE):
-                data = np.array(self.wav[i:i+CHUNK_SIZE], dtype=self.size)
-                if len(data) != CHUNK_SIZE:
+            for i in range(0,len(self.wav),self.chunksize):
+                data = np.array(self.wav[i:i+self.chunksize], dtype=self.size)
+                if len(data) != self.chunksize:
                     continue
                 fft = pyfftw.interfaces.numpy_fft.fft(data)
-                fft = np.abs(fft[:CHUNK_SIZE/2])
+                fft = np.abs(fft[:self.chunksize/2])
                 avgdata += fft
                 del data
                 del fft
-            self.fft = (avgdata, spacing)
+            if max(avgdata) == 0:
+                self.chunksize = self.chunksize // 2
+                self.fft = self.get_fft(pbar=pbar)
+            else:
+                self.fft = (avgdata, spacing)
         return self.fft
 
     def plot_waveform(self):
@@ -126,13 +129,14 @@ def hash_array(arr):
     return result
 
 print("Loading sample into memory...")
-sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "noot.wav")
+sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav", 8192)
+sample.plot_waveform()
 threshold = int(float(sample.framerate) * 0.075)
 print("Analyzing sample...")
 ffreq = sample.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
 print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "megalovania.mid", sample)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dogsong.mid", sample)
 print("Rendering audio...")
 output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
