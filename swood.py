@@ -145,8 +145,8 @@ for time, notes in midi.notes:
         else:
             rendered = render_note(note, sample, threshold)
             sbl = len(rendered)
-            notecache[note[:2]] = (1, time, rendered)
             output[time:min(time+sbl, len(output))] += rendered[:min(time+sbl, len(output))-time]
+            notecache[note[:2]] = (1, time, rendered)
         c += 1
         bar.update(c)
     tick -= 1
