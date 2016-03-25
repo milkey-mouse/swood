@@ -45,6 +45,8 @@ class WavFFT(object):
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
             for i in range(0,len(self.wav),CHUNK_SIZE):
                 data = np.array(self.wav[i:i+CHUNK_SIZE], dtype=self.size)
+                if len(data) != CHUNK_SIZE:
+                    continue
                 fft = pyfftw.interfaces.numpy_fft.fft(data)
                 fft = np.abs(fft[:CHUNK_SIZE/2])
                 avgdata += fft
@@ -124,13 +126,13 @@ def hash_array(arr):
     return result
 
 print("Loading sample into memory...")
-sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav")
+sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "noot.wav")
 threshold = int(float(sample.framerate) * 0.075)
 print("Analyzing sample...")
 ffreq = sample.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
 print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dont-stop-me-now.mid", sample)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "megalovania.mid", sample)
 print("Rendering audio...")
 output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
