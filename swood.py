@@ -92,12 +92,12 @@ class MIDIParser(object):
                     notes[message.note].append(time)
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    results[int(round(notes[message.note][0]*sample.framerate))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note)))
+                    results[int(round(notes[message.note][0]*sample.framerate))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note), message.velocity / 127))
                     notes[message.note].pop(0)
                     self.notecount += 1
             for ntime, nlist in notes.items():
                 for note in nlist:
-                    results[int(round(notes[note][0]*sample.framerate))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note)))
+                    results[int(round(notes[note][0]*sample.framerate))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note), 64))
                     self.notecount += 1
             self.notes = sorted(results.items())
             self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
@@ -109,7 +109,7 @@ class MIDIParser(object):
 notecache = {}
 
 def render_note(note, sample, threshold):
-    scaled = scipy.ndimage.zoom(sample.wav[:max(int((note[0] + threshold)*note[1]),len(sample.wav))], note[1])
+    scaled = scipy.ndimage.zoom(sample.wav[:max(int((note[0] + threshold)*note[1]),len(sample.wav))], note[1]) * note[2]
     if len(scaled) < note[0] + threshold:
         return scaled
     else:
@@ -124,33 +124,28 @@ def hash_array(arr):
     return result
 
 print("Loading sample into memory...")
-sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav")
+sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "swood.wav")
 threshold = int(float(sample.framerate) * 0.075)
 print("Analyzing sample...")
 ffreq = sample.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
 print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "badtime.MID", sample)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dsmn.MID", sample)
 print("Rendering audio...")
-#print(sample.wav[100])
-#sample.wav = sample.wav.astype(np.float64)
-#sample.wav /= (midi.maxnotes*2)
-#sample.wav = sample.wav.astype(sample.size)
-#print(sample.wav[100])
 output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
 c = 0
 tick = 10
 for time, notes in midi.notes:
     for note in notes:
-        if note in notecache:
-            sbl = len(notecache[note][2])
-            output[time:time+sbl] += notecache[note][2]
-            notecache[note] = (notecache[note][0] + 1, notecache[note][1], notecache[note][2])
+        if note[:2] in notecache:
+            sbl = len(notecache[note[:2]][2])
+            output[time:time+sbl] += notecache[note[:2]][2]
+            notecache[note[:2]] = (notecache[note[:2]][0] + 1, notecache[note[:2]][1], notecache[note[:2]][2])
         else:
             rendered = render_note(note, sample, threshold)
             sbl = len(rendered)
-            notecache[note] = (1, time, rendered)
+            notecache[note[:2]] = (1, time, rendered)
             output[time:time+sbl] += rendered
         c += 1
         bar.update(c)
@@ -163,14 +158,6 @@ for time, notes in midi.notes:
 
 output *= ((2**32) / (abs(output.max()) + (abs(output.min()))))
 output -= output.min() + (2**32/2)
-
-import matplotlib.pyplot as plt
-plot = plt.figure(1)
-plt.plot(range(len(output)), output, "r")
-plt.xlabel("Time")
-plt.ylabel("Amplitude")
-plt.title("Audio File Waveform")
-plt.show(1)
     
 with wave.open(sys.argv[3] if len(sys.argv) > 3 else "out.wav", "w") as outwav:
     outwav.setframerate(sample.framerate)
