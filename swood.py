@@ -124,13 +124,13 @@ def hash_array(arr):
     return result
 
 print("Loading sample into memory...")
-sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "swood.wav")
+sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav")
 threshold = int(float(sample.framerate) * 0.075)
 print("Analyzing sample...")
 ffreq = sample.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
 print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dsmn.MID", sample)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dont-stop-me-now.mid", sample)
 print("Rendering audio...")
 output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
@@ -146,7 +146,7 @@ for time, notes in midi.notes:
             rendered = render_note(note, sample, threshold)
             sbl = len(rendered)
             notecache[note[:2]] = (1, time, rendered)
-            output[time:time+sbl] += rendered
+            output[time:min(time+sbl, len(output))] += rendered[:min(time+sbl, len(output))-time]
         c += 1
         bar.update(c)
     tick -= 1
