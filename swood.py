@@ -97,7 +97,7 @@ class MIDIParser(object):
                     notes[message.note].append(time)
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    results[int(round(notes[message.note][0]*sample.framerate))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note), message.velocity / 127))
+                    results[int(round(notes[message.note][0]*sample.framerate))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note), 1 if message.velocity / 127 == 0 else message.velocity / 127))
                     notes[message.note].pop(0)
                     self.notecount += 1
             for ntime, nlist in notes.items():
@@ -130,13 +130,12 @@ def hash_array(arr):
 
 print("Loading sample into memory...")
 sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "doot.wav", 8192)
-sample.plot_waveform()
 threshold = int(float(sample.framerate) * 0.075)
 print("Analyzing sample...")
 ffreq = sample.get_max_freq()
 print("Fundamental Frequency: {} Hz".format(ffreq))
 print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "dogsong.mid", sample)
+midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "tetris.mid", sample)
 print("Rendering audio...")
 output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
 bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
