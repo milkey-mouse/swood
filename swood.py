@@ -1,7 +1,8 @@
-import scipy.ndimage
+from PIL import Image
 import progressbar
 import numpy as np
 import collections
+import warnings
 import pyfftw
 import pprint
 import math
@@ -10,6 +11,7 @@ import wave
 import sys
 
 pyfftw.interfaces.cache.enable()
+warnings.filterwarnings("ignore")
 
 class WavFFT(object):
     def __init__(self, filename, chunksize):
@@ -35,13 +37,12 @@ class WavFFT(object):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
             self.wav -= int(np.average(self.wav))
 
-    def get_fft(self, pbar=True):
+    def get_fft(self):
         if not self.fft:
             spacing = float(self.framerate) / self.chunksize
             avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
             c = None
             offset = None
-            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar()])
             for i in range(0,len(self.wav),self.chunksize):
                 data = np.array(self.wav[i:i+self.chunksize], dtype=self.size)
                 if len(data) != self.chunksize:
@@ -53,29 +54,11 @@ class WavFFT(object):
                 del fft
             if max(avgdata) == 0:
                 self.chunksize = self.chunksize // 2
-                self.fft = self.get_fft(pbar=pbar)
+                self.fft = self.get_fft()
             else:
                 self.fft = (avgdata, spacing)
         return self.fft
-
-    def plot_waveform(self):
-        import matplotlib.pyplot as plt
-        plot = plt.figure(1)
-        plt.plot(range(len(self.wav)), self.wav, "r")
-        plt.xlabel("Time")
-        plt.ylabel("Amplitude")
-        plt.title("Audio File Waveform")
-        plt.show(1)
-
-    def plot_fft(self):
-        import matplotlib.pyplot as plt
-        plot = plt.figure(1)
-        plt.plot([(i*self.fft[1])+self.fft[1] for i in range(len(self.fft[0][1:1000//self.fft[1]]))], list(fft[0][1:1000//self.fft[1]]), "r")
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Intensity (abs(fft[freq]))")
-        plt.title("FFT Analysis")
-        plt.show(1)
-
+        
     def get_max_freq(self):
         if not self.maxfreq:
             fft = self.get_fft()
@@ -84,7 +67,6 @@ class WavFFT(object):
 
 class MIDIParser(object):
     def __init__(self, path, wav, transpose=0, speed=1):
-        transpose *= 12
         results = collections.defaultdict(lambda: [])
         notes = collections.defaultdict(lambda: [])
         self.notecount = 0
@@ -112,10 +94,15 @@ class MIDIParser(object):
         # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
         return (2.0**((notenum-69)/12.0)) * 440.0
 
-notecache = {}
+
+def zoom(array, multiplier):
+    array.flags.writeable = False
+    im = PIL.Image.frombuffer("L", (1, len(array.data)), array.data)
+    im = im.resize((1, int(round(len(array.data)*multiplier))), resample=Image.BICUBIC)
+    return np.asarray(im, type=np.float64)
 
 def render_note(note, sample, threshold):
-    scaled = scipy.ndimage.zoom(sample.wav[:max(int((note[0] + threshold)*note[1]),len(sample.wav))], note[1]) * note[2]
+    scaled = zoom(sample.wav[:max(int((note[0] + threshold)*note[1]),len(sample.wav))], note[1]) * note[2]
     if len(scaled) < note[0] + threshold:
         return scaled
     else:
@@ -129,45 +116,74 @@ def hash_array(arr):
     arr.flags.writeable = True
     return result
 
-print("Loading sample into memory...")
-sample = WavFFT(sys.argv[1] if len(sys.argv) > 1 else "saw.wav", 8192)
-threshold = int(float(sample.framerate) * 0.075)
-print("Analyzing sample...")
-ffreq = sample.get_max_freq()
-print("Fundamental Frequency: {} Hz".format(ffreq))
-print("Parsing MIDI...")
-midi = MIDIParser(sys.argv[2] if len(sys.argv) > 2 else "tetris.mid", sample, speed=1.2)
-print("Rendering audio...")
-output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
-bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
-c = 0
-tick = 10
-for time, notes in midi.notes:
-    for note in notes:
-        if note[:2] in notecache:
-            sbl = len(notecache[note[:2]][2])
-            output[time:time+sbl] += notecache[note[:2]][2]
-            notecache[note[:2]] = (notecache[note[:2]][0] + 1, notecache[note[:2]][1], notecache[note[:2]][2])
-        else:
-            rendered = render_note(note, sample, threshold)
-            sbl = len(rendered)
-            output[time:min(time+sbl, len(output))] += rendered[:min(time+sbl, len(output))-time]
-            notecache[note[:2]] = (1, time, rendered)
-        c += 1
-        bar.update(c)
-    tick -= 1
-    if tick == 0:
-        tick = 10
-        for k in list(notecache.keys()):
-            if (time - notecache[k][1]) > (7.5*sample.framerate) and notecache[k][0] <= 2:
-                del notecache[k]
+def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075):
+    print("Loading sample into memory")
+    sample = WavFFT(inwav, binsize)
+    print("Analyzing sample")
+    ffreq = sample.get_max_freq()
+    threshold = int(float(sample.framerate) * threshold_mult)
+    print("Fundamental Frequency: {} Hz".format(ffreq)) 
+    print("Parsing MIDI")
+    midi = MIDIParser(inmid, sample)
+    print("Creating output buffer")
+    output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
+    print("Rendering audio")
+    c = 0
+    tick = 10
+    notecache = {}
+    bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+    for time, notes in midi.notes:
+        for note in notes:
+            if note[:2] in notecache:
+                sbl = len(notecache[note[:2]][2])
+                output[time:time+sbl] += notecache[note[:2]][2]
+                notecache[note[:2]] = (notecache[note[:2]][0] + 1, notecache[note[:2]][1], notecache[note[:2]][2])
+            else:
+                rendered = render_note(note, sample, threshold)
+                sbl = len(rendered)
+                output[time:min(time+sbl, len(output))] += rendered[:min(time+sbl, len(output))-time]
+                notecache[note[:2]] = (1, time, rendered)
+            c += 1
+            bar.update(c)
+        # cache "garbage collection"
+        tick -= 1
+        if tick == 0:
+            tick = 10
+            for k in list(notecache.keys()):
+                if (time - notecache[k][1]) > (7.5*sample.framerate) and notecache[k][0] <= 2:
+                    del notecache[k]
+                    
+    print("Normalizing audio")
 
-output *= ((2**32) / (abs(output.max()) + (abs(output.min()))))
-output -= output.min() + (2**32/2)
+    # normalize and convert float64s into PCM int32s
+    output *= ((2**32) / (abs(output.max()) + (abs(output.min()))))
+    output -= output.min() + (2**32/2)
     
-with wave.open(sys.argv[3] if len(sys.argv) > 3 else "out.wav", "w") as outwav:
-    outwav.setframerate(sample.framerate)
-    outwav.setnchannels(1)
-    outwav.setsampwidth(4)
-    outwav.setnframes(len(output))
-    outwav.writeframesraw(output.astype(np.int32))
+    print("Saving audio")
+    
+    with wave.open(outpath, "w") as outwav:
+        outwav.setframerate(sample.framerate)
+        outwav.setnchannels(1)
+        outwav.setsampwidth(4)
+        outwav.setnframes(len(output))
+        outwav.writeframesraw(output.astype(np.int32))
+        
+    print("Saved to {}".format(outpath))
+    
+def run_cmd():
+    if len(sys.argv) == 1:
+        print("""swood.exe - the automatic ytpmv generator
+
+usage: swood in_wav in_midi out_wav
+  in_wav: a wav file to use as the instrument for the midi
+  in_midi: a midi to output with the wav sample as the instrument
+  out_wav: location for the finished song as a wav
+
+options:
+  --transpose=0      transpose the midi by n semitones
+  --speed=1.0        speed up the midi by this multiplier
+  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
+  --binsize=8192     FFT bin size for the sample analysis; the lower this number, the more off-pitch the result could be""")
+  
+if __name__ == "__main__":
+    run_cmd()
