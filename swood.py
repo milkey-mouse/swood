@@ -1,17 +1,14 @@
-from PIL import Image
-import progressbar
-import numpy as np
-import collections
-import warnings
-import pyfftw
-import pprint
-import math
-import mido
-import wave
-import sys
-
-pyfftw.interfaces.cache.enable()
-warnings.filterwarnings("ignore")
+def do_imports():
+    import collections
+    import math
+    import wave
+    
+    from PIL import Image
+    import progressbar
+    import numpy as np
+    import pyfftw
+    import mido
+    pyfftw.interfaces.cache.enable()
 
 class WavFFT(object):
     def __init__(self, filename, chunksize):
@@ -205,7 +202,12 @@ options:
         except ValueError:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
+    do_imports()
     run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize)
-  
+
+import sys
+
 if __name__ == "__main__":
-    run_cmd()
+    run_cmd()  # be conservative with the imports to be faster if it's not actually doing anything
+else:  # do ALL the imports
+    do_imports()
