@@ -98,7 +98,7 @@ class MIDIParser(object):
 def zoom(array, multiplier):
     array.flags.writeable = False
     im = PIL.Image.frombuffer("L", (1, len(array.data)), array.data)
-    im = im.resize((1, int(round(len(array.data)*multiplier))), resample=Image.BICUBIC)
+    im = im.resize((1, int(round(len(array.data)*multiplier))), resample=Image.BILINEAR)
     return np.asarray(im, type=np.float64)
 
 def render_note(note, sample, threshold):
@@ -171,19 +171,41 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     print("Saved to {}".format(outpath))
     
 def run_cmd():
-    if len(sys.argv) == 1:
-        print("""swood.exe - the automatic ytpmv generator
+    transpose=0
+    speed=1.0
+    threshold=0.075
+    binsize=8192
+    if len(sys.argv) <= 3:
+        print("""swood - the automatic ytpmv generator
 
 usage: swood in_wav in_midi out_wav
-  in_wav: a wav file to use as the instrument for the midi
+  in_wav: a short wav file to use as the instrument for the midi
   in_midi: a midi to output with the wav sample as the instrument
   out_wav: location for the finished song as a wav
 
 options:
-  --transpose=0      transpose the midi by n semitones
-  --speed=1.0        speed up the midi by this multiplier
-  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
-  --binsize=8192     FFT bin size for the sample analysis; the lower this number, the more off-pitch the result could be""")
+  --transpose={}      transpose the midi by n semitones
+  --speed={}        speed up the midi by this multiplier
+  --threshold={}  maximum amount of time after a note ends that it can go on for a smoother ending
+  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch""".format(transpose, speed, threshold, binsize))
+        sys.exit(1)
+    for arg in sys.argv[4:]:
+        try:
+            if arg.startswith("--transpose="):
+                transpose = int(float(arg[len("--transpose="):]))
+            elif arg.startswith("--speed="):
+                speed = float(arg[len("--speed="):])
+            elif arg.startswith("--threshold="):
+                threshold = float(arg[len("--threshold="):])
+            elif arg.startswith("--binsize="):
+                binsize = int(float(arg[len("--binsize="):]))
+            else:
+                print("Unrecognized command-line option '{}'.".format(arg))
+                sys.exit(1)
+        except ValueError:
+            print("Error parsing command-line option '{}'.".format(arg))
+            sys.exit(1)
+    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize)
   
 if __name__ == "__main__":
     run_cmd()
