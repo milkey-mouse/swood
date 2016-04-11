@@ -34,6 +34,8 @@ class WavFFT(object):
                 for i in range(0, wavfile.getnframes()):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
             self.wav -= int(np.average(self.wav))
+            self.wav.flags.writeable = False
+            self.img = Image.frombytes("F", (len(self.wav), 1), self.wav.astype(np.float32).tobytes(), "raw", "F", 0, 1)
 
     def get_fft(self):
         if self.chunksize % 2 != 0:
@@ -97,15 +99,12 @@ class MIDIParser(object):
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 
-def zoom(array, multiplier):
-    array.flags.writeable = False
-    im = PIL.Image.frombuffer("L", (1, len(array.data)), array.data)
-    im = im.resize((1, int(round(len(array.data) * multiplier))), resample=Image.BILINEAR)
-    return np.asarray(im, type=np.float64)
+def zoom(img, multiplier, alg):
+    return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=alg), dtype=np.float32).flatten()  # magic, don't touch
 
 
-def render_note(note, sample, threshold):
-    scaled = zoom(sample.wav[:max(int((note[0] + threshold) * note[1]), len(sample.wav))], note[1]) * note[2]
+def render_note(note, sample, threshold, alg):
+    scaled = zoom(sample.img, note[1], alg) * note[2]
     if len(scaled) < note[0] + threshold:
         return scaled
     else:
@@ -121,7 +120,7 @@ def hash_array(arr):
     return result
 
 
-def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075):
+def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False):
     print("Loading sample into memory")
     sample = WavFFT(inwav, binsize)
     print("Analyzing sample")
@@ -136,6 +135,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     c = 0
     tick = 10
     notecache = {}
+    alg = Image.BILINEAR if linear else Image.BICUBIC
     bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
     for time, notes in midi.notes:
         for note in notes:
@@ -144,7 +144,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
                 output[time:time + sbl] += notecache[note[:2]][2]
                 notecache[note[:2]] = (notecache[note[:2]][0] + 1, notecache[note[:2]][1], notecache[note[:2]][2])
             else:
-                rendered = render_note(note, sample, threshold)
+                rendered = render_note(note, sample, threshold, alg)
                 sbl = len(rendered)
                 output[time:min(time + sbl, len(output))] += rendered[:min(time + sbl, len(output)) - time]
                 notecache[note[:2]] = (1, time, rendered)
@@ -181,6 +181,7 @@ def run_cmd():
     speed = 1.0
     threshold = 0.075
     binsize = 8192
+    linear=False
     if len(sys.argv) <= 3:
         print("""swood - the automatic ytpmv generator
 
@@ -190,14 +191,17 @@ usage: swood in_wav in_midi out_wav
   out_wav: location for the finished song as a wav
 
 options:
-  --transpose={}      transpose the midi by n semitones
-  --speed={}        speed up the midi by this multiplier
+  --transpose={}  transpose the midi by n semitones
+  --speed={}      speed up the midi by this multiplier
+  --linear        use a lower quality scaling algorithm that will be a little bit faster
   --threshold={}  maximum amount of time after a note ends that it can go on for a smoother ending
-  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch""".format(transpose, speed, threshold, binsize))
+  --binsize=8192  FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch""".format(transpose, speed, threshold, binsize))
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
-            if arg.startswith("--transpose="):
+            if arg == "--linear":
+                linear = True
+            elif arg.startswith("--transpose="):
                 transpose = int(float(arg[len("--transpose="):]))
             elif arg.startswith("--speed="):
                 speed = float(arg[len("--speed="):])
@@ -211,7 +215,7 @@ options:
         except ValueError:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
-    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize)
+    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear)
 
 if __name__ == "__main__":
     run_cmd()
