@@ -36,6 +36,8 @@ class WavFFT(object):
             self.wav -= int(np.average(self.wav))
 
     def get_fft(self):
+        if self.chunksize % 2 != 0:
+            print("Error: bin size must be a multiple of 2")
         if not self.fft:
             spacing = float(self.framerate) / self.chunksize
             avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
@@ -46,7 +48,7 @@ class WavFFT(object):
                 if len(data) != self.chunksize:
                     continue
                 fft = pyfftw.interfaces.numpy_fft.fft(data)
-                fft = np.abs(fft[:self.chunksize / 2])
+                fft = np.abs(fft[:self.chunksize // 2])
                 avgdata += fft
                 del data
                 del fft
@@ -80,12 +82,12 @@ class MIDIParser(object):
                     notes[message.note].append(time)
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    results[int(round(notes[message.note][0] * sample.framerate / speed))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note + transpose), 1 if message.velocity / 127 == 0 else message.velocity / 127))
+                    results[int(round(notes[message.note][0] * wav.framerate / speed))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note + transpose), 1 if message.velocity / 127 == 0 else message.velocity / 127))
                     notes[message.note].pop(0)
                     self.notecount += 1
             for ntime, nlist in notes.items():
                 for note in nlist:
-                    results[int(round(notes[note][0] * sample.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
+                    results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
                     self.notecount += 1
             self.notes = sorted(results.items())
             self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
