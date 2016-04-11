@@ -2,4 +2,4 @@
 Shitpost-O-Matic™
 
     pip install swood
-    swood doot.wav megalomania.mid dootalovania.wav
+    swood doot.wav megalovania.mid dootalovania.wav
