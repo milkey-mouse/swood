@@ -11,7 +11,7 @@ import mido
 pyfftw.interfaces.cache.enable()
 
 
-class WavFFT(object):
+class WavFFT:
     def __init__(self, filename, chunksize):
         with wave.open(filename, "r") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
@@ -67,13 +67,27 @@ class WavFFT(object):
             self.maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
         return self.maxfreq
 
+class Note:
+    def __init__(self, time, frequency, volume):
+        self.time = time
+        self.frequency = frequency
+        self.volume = volume
+        
+class CachedNote:
+    def __init__(self, time, rendered):
+        self.used = 1
+        self.time = time
+        self.rendered = rendered
+        self.length = len(rendered)
 
-class MIDIParser(object):
-    def __init__(self, path, wav, transpose=0, speed=1):
+class MIDIParser:
+    def __init__(self, path, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
         results = collections.defaultdict(lambda: [])
         notes = collections.defaultdict(lambda: [])
         self.notecount = 0
         self.maxnotes = 0
+        self.maxvolume = 0
+        volume = 0
         with mido.MidiFile(path, "r") as mid:
             time = 0
             for message in mid:
@@ -81,18 +95,29 @@ class MIDIParser(object):
                 if "channel" in message.__dict__ and message.channel == 10:
                     continue  # channel 10 is reserved for percussion
                 if message.type == "note_on":
-                    notes[message.note].append(time)
+                    note_volume = 1 if message.velocity == 0 else message.velocity / 127
+                    notes[message.note].append((note_volume, time))
+                    volume += note_volume
+                    self.maxvolume = max(volume, self.maxvolume)
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    results[int(round(notes[message.note][0] * wav.framerate / speed))].append((int((time - notes[message.note][0]) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note + transpose), 1 if message.velocity / 127 == 0 else message.velocity / 127))
+                    onote = notes[message.note][0][1]
+                    results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note + transpose), 1 if message.velocity == 0 else message.velocity / 127))
+                    volume -= notes[message.note][0][0]
                     notes[message.note].pop(0)
                     self.notecount += 1
-            for ntime, nlist in notes.items():
-                for note in nlist:
-                    results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
-                    self.notecount += 1
+            if len(notes) != 0:
+                print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
+                for ntime, nlist in notes.items():
+                    for note in nlist:
+                        results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
+                        self.notecount += 1
             self.notes = sorted(results.items())
             self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
+            for time, nlist in self.notes:  
+                for i in range(len(nlist)):  # convert all the notes to the class kind
+                    oldnote = nlist[i]
+                    nlist[i] = Note(oldnote[0], oldnote[1], oldnote[2])
 
     def note_to_freq(self, notenum):
         # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
@@ -104,13 +129,14 @@ def zoom(img, multiplier, alg):
 
 
 def render_note(note, sample, threshold, alg):
-    scaled = zoom(sample.img, note[1], alg) * note[2]
-    if len(scaled) < note[0] + threshold:
+    scaled = zoom(sample.img, note.frequency, alg)
+    if len(scaled) < note.time + threshold:
         return scaled
     else:
-        scaled = scaled[:note[0] + threshold]
-        cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note[0]:])])
-        return scaled[:note[0] + cutoff]
+        scaled = scaled[:note.time + threshold]
+        # find the nearest/closest zero crossing within the threshold and continue until that
+        cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
+        return scaled[:note.time + cutoff]
 
 
 def hash_array(arr):
@@ -120,49 +146,51 @@ def hash_array(arr):
     return result
 
 
-def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False):
+def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None):
+    c = 0
+    tick = 15
+    notecache = {}
+    alg = Image.BILINEAR if linear else Image.BICUBIC
     print("Loading sample into memory")
     sample = WavFFT(inwav, binsize)
     print("Analyzing sample")
     ffreq = sample.get_max_freq()
     threshold = int(float(sample.framerate) * threshold_mult)
+    if not cachesize:
+        cachesize = 7.5
+    cachesize *= sample.framerate
     print("Fundamental Frequency: {} Hz".format(ffreq))
     print("Parsing MIDI")
-    midi = MIDIParser(inmid, sample)
+    midi = MIDIParser(inmid, sample, transpose=transpose, speed=speed)
     print("Creating output buffer")
-    output = np.zeros(midi.length + 1 + threshold, dtype=np.float64)
+    output = np.zeros(midi.length + 1 + threshold, dtype=np.float32)
     print("Rendering audio")
-    c = 0
-    tick = 10
-    notecache = {}
-    alg = Image.BILINEAR if linear else Image.BICUBIC
     bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
     for time, notes in midi.notes:
         for note in notes:
-            if note[:2] in notecache:
-                sbl = len(notecache[note[:2]][2])
-                output[time:time + sbl] += notecache[note[:2]][2]
-                notecache[note[:2]] = (notecache[note[:2]][0] + 1, notecache[note[:2]][1], notecache[note[:2]][2])
+            if (note.time, note.frequency) in notecache:
+                cachednote = notecache[(note.time, note.frequency)]
+                output[time:time + cachednote.length] += cachednote.rendered * (note.volume / midi.maxvolume)
+                notecache[(note.time, note.frequency)].used += 1
             else:
                 rendered = render_note(note, sample, threshold, alg)
-                sbl = len(rendered)
-                output[time:min(time + sbl, len(output))] += rendered[:min(time + sbl, len(output)) - time]
-                notecache[note[:2]] = (1, time, rendered)
+                out_length = min(time + len(rendered), len(output))
+                output[time:out_length] += rendered[:out_length - time] * (note.volume / midi.maxvolume)
+                notecache[(note.time, note.frequency)] = CachedNote(time, rendered)
             c += 1
             bar.update(c)
         # cache "garbage collection"
         tick -= 1
         if tick == 0:
-            tick = 10
+            tick = 15
             for k in list(notecache.keys()):
-                if (time - notecache[k][1]) > (7.5 * sample.framerate) and notecache[k][0] <= 2:
+                if (time - notecache[k].time) > cachesize and notecache[k].used < 3:
                     del notecache[k]
 
     print("Normalizing audio")
 
-    # normalize and convert float64s into PCM int32s
-    output *= ((2 ** 32) / (abs(output.max()) + (abs(output.min()))))
-    output -= output.min() + (2 ** 32 / 2)
+    # normalize and convert float32s into PCM int32s
+    output *= (2 ** 32) / (abs(output.max()) + abs(output.min()))
 
     print("Saving audio")
 
@@ -181,6 +209,7 @@ def run_cmd():
     speed = 1.0
     threshold = 0.075
     binsize = 8192
+    cachesize = 7.5
     linear=False
     if len(sys.argv) <= 3:
         print("""swood - the automatic ytpmv generator
@@ -191,11 +220,12 @@ usage: swood in_wav in_midi out_wav
   out_wav: location for the finished song as a wav
 
 options:
-  --transpose={}  transpose the midi by n semitones
-  --speed={}      speed up the midi by this multiplier
-  --linear        use a lower quality scaling algorithm that will be a little bit faster
-  --threshold={}  maximum amount of time after a note ends that it can go on for a smoother ending
-  --binsize=8192  FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch""".format(transpose, speed, threshold, binsize))
+  --transpose=0      transpose the midi by n semitones
+  --speed=1.0        speed up the midi by this multiplier
+  --linear           use a lower quality scaling algorithm that will be a little bit faster
+  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
+  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
+  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""")
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
@@ -215,7 +245,7 @@ options:
         except ValueError:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
-    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear)
+    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear, cachesize=cachesize)
 
 if __name__ == "__main__":
     run_cmd()
