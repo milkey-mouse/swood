@@ -18,7 +18,7 @@ class WavFFT:
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
             self.chunksize = chunksize
-            self.offset = int(2 ** (8 * max(self.sampwidth, 4)) / 2)  # max 32-bit
+            self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
             self.size = np.int32
             self.fft = None
             self.maxfreq = None
@@ -34,9 +34,9 @@ class WavFFT:
             else:
                 for i in range(0, wavfile.getnframes()):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
-            self.wav -= int(np.average(self.wav))
+            #self.wav -= int(np.average(self.wav))
             self.wav.flags.writeable = False
-            self.img = Image.frombytes("F", (len(self.wav), 1), self.wav.astype(np.float32).tobytes(), "raw", "F", 0, 1)
+            self.img = Image.frombytes("F", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)))).astype(np.float32).tobytes(), "raw", "F", 0, 1)
 
     def get_fft(self):
         if self.chunksize % 2 != 0:
@@ -189,10 +189,9 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
                 if (time - notecache[k].time) > cachesize and notecache[k].used < 3:
                     del notecache[k]
 
-    print("Normalizing audio")
-
+    #print("Normalizing audio")
     # normalize and convert float32s into PCM int32s
-    output *= (2 ** 32) / (abs(output.max()) + abs(output.min()))
+    #output *= (2 ** 32) / (abs(output.max()) + abs(output.min()))
 
     print("Saving audio")
 
