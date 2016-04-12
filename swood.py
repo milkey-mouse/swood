@@ -36,7 +36,7 @@ class WavFFT:
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
             #self.wav -= int(np.average(self.wav))
             self.wav.flags.writeable = False
-            self.img = Image.frombytes("F", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)))).astype(np.float32).tobytes(), "raw", "F", 0, 1)
+            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)))).astype(np.int32).tobytes(), "raw", "I", 0, 1)
 
     def get_fft(self):
         if self.chunksize % 2 != 0:
@@ -124,9 +124,12 @@ class MIDIParser:
         # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
+class CachedWavFile:
+    def __init__(self, chunksize=8192):
+        pass
 
 def zoom(img, multiplier, alg):
-    return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=alg), dtype=np.float32).flatten()  # magic, don't touch
+    return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=alg), dtype=np.int32).flatten()
 
 
 def render_note(note, sample, threshold, alg):
@@ -146,7 +149,6 @@ def hash_array(arr):
     arr.flags.writeable = True
     return result
 
-
 def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None):
     c = 0
     tick = 15
@@ -164,19 +166,20 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     print("Parsing MIDI")
     midi = MIDIParser(inmid, sample, transpose=transpose, speed=speed)
     print("Creating output buffer")
-    output = np.zeros(midi.length + 1 + threshold, dtype=np.float32)
+    outlen = midi.length + 1 + threshold
+    output = np.zeros(outlen, dtype=np.int32)
     print("Rendering audio")
     bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
     for time, notes in midi.notes:
         for note in notes:
             if (note.time, note.frequency) in notecache:
                 cachednote = notecache[(note.time, note.frequency)]
-                output[time:time + cachednote.length] += cachednote.rendered * (note.volume / midi.maxvolume)
+                output[time:time + cachednote.length] += (cachednote.rendered * (note.volume / midi.maxvolume)).astype(np.int32)
                 notecache[(note.time, note.frequency)].used += 1
             else:
                 rendered = render_note(note, sample, threshold, alg)
-                out_length = min(time + len(rendered), len(output))
-                output[time:out_length] += rendered[:out_length - time] * (note.volume / midi.maxvolume)
+                out_length = min(len(rendered), outlen - time)
+                output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume)).astype(np.int32)
                 notecache[(note.time, note.frequency)] = CachedNote(time, rendered)
             c += 1
             bar.update(c)
@@ -189,18 +192,14 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
                 if (time - notecache[k].time) > cachesize and notecache[k].used < 3:
                     del notecache[k]
 
-    #print("Normalizing audio")
-    # normalize and convert float32s into PCM int32s
-    #output *= (2 ** 32) / (abs(output.max()) + abs(output.min()))
-
     print("Saving audio")
 
     with wave.open(outpath, "w") as outwav:
         outwav.setframerate(sample.framerate)
         outwav.setnchannels(1)
         outwav.setsampwidth(4)
-        outwav.setnframes(len(output))
-        outwav.writeframesraw(output.astype(np.int32))
+        outwav.setnframes(outlen)
+        outwav.writeframesraw(output)
 
     print("Saved to {}".format(outpath))
 
@@ -231,7 +230,7 @@ options:
   --linear           use a lower quality scaling algorithm that will be a little bit faster
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
-  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))     
+  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
