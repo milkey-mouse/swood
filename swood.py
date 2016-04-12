@@ -1,3 +1,4 @@
+import pkg_resources
 import collections
 import math
 import wave
@@ -150,14 +151,14 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     c = 0
     tick = 15
     notecache = {}
+    if not cachesize:
+        cachesize = 7.5
     alg = Image.BILINEAR if linear else Image.BICUBIC
     print("Loading sample into memory")
     sample = WavFFT(inwav, binsize)
     print("Analyzing sample")
     ffreq = sample.get_max_freq()
     threshold = int(float(sample.framerate) * threshold_mult)
-    if not cachesize:
-        cachesize = 7.5
     cachesize *= sample.framerate
     print("Fundamental Frequency: {} Hz".format(ffreq))
     print("Parsing MIDI")
@@ -179,6 +180,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
                 notecache[(note.time, note.frequency)] = CachedNote(time, rendered)
             c += 1
             bar.update(c)
+        
         # cache "garbage collection"
         tick -= 1
         if tick == 0:
@@ -212,7 +214,12 @@ def run_cmd():
     cachesize = 7.5
     linear=False
     if len(sys.argv) <= 3:
-        print("""swood - the automatic ytpmv generator
+        version = "?"
+        try:
+            version = pkg_resources.get_distribution("swood").version
+        except:
+            pass
+        print("""swood - the automatic ytpmv generator (v. {})
 
 usage: swood in_wav in_midi out_wav
   in_wav: a short wav file to use as the instrument for the midi
@@ -225,7 +232,7 @@ options:
   --linear           use a lower quality scaling algorithm that will be a little bit faster
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
-  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""")
+  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))     
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
