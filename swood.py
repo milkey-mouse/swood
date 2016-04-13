@@ -125,7 +125,15 @@ class MIDIParser:
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 class CachedWavFile:
-    def __init__(self, chunksize=8192):
+    def __init__(self, length, dtype=np.int32, chunksize=8192):
+        self.chunksize = chunksize
+        self.dtype = dtype
+        self.chunks = collections.defaultdict(lambda: np.zeros((self.chunksize,), dtype=self.dtype))
+        self.__getitem__ = self.chunks.__getitem__
+        
+    # note to self: http://rafekettler.com/magicmethods.html
+        
+    def add_data(self, idx, data):
         pass
 
 def zoom(img, multiplier, alg):
