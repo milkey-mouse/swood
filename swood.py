@@ -36,7 +36,7 @@ class WavFFT:
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
             #self.wav -= int(np.average(self.wav))
             self.wav.flags.writeable = False
-            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)))).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)) * 0.9)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
 
     def get_fft(self):
         if self.chunksize % 2 != 0:
@@ -127,6 +127,7 @@ class MIDIParser:
 class CachedWavFile:
     def __init__(self, length, dtype=np.int32, chunksize=8192):
         self.chunksize = chunksize
+        self.savedchunks = 0
         self.dtype = dtype
         self.chunks = collections.defaultdict(lambda: np.zeros((self.chunksize,), dtype=self.dtype))
         self.__getitem__ = self.chunks.__getitem__
