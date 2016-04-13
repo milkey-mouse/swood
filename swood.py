@@ -130,7 +130,10 @@ class CachedWavFile:
         self.savedchunks = 0
         self.dtype = dtype
         self.chunks = collections.defaultdict(lambda: np.zeros((self.chunksize,), dtype=self.dtype))
-        self.__getitem__ = self.chunks.__getitem__
+        
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.chunks[key]
         
     # note to self: http://rafekettler.com/magicmethods.html
         
