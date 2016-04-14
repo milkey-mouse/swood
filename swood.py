@@ -88,6 +88,7 @@ class MIDIParser:
         self.notecount = 0
         self.maxnotes = 0
         self.maxvolume = 0
+        self.maxmult = 0
         volume = 0
         with mido.MidiFile(path, "r") as mid:
             time = 0
@@ -103,7 +104,9 @@ class MIDIParser:
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
                     onote = notes[message.note][0][1]
-                    results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), wav.get_max_freq() / self.note_to_freq(message.note + transpose), 1 if message.velocity == 0 else message.velocity / 127))
+                    multiplier = wav.get_max_freq() / self.note_to_freq(message.note + transpose)
+                    self.maxmult = max(self.maxmult, multiplier)
+                    results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
                     volume -= notes[message.note][0][0]
                     notes[message.note].pop(0)
                     self.notecount += 1
@@ -144,9 +147,9 @@ def zoom(img, multiplier, alg):
     return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=alg), dtype=np.int32).flatten()
 
 
-def render_note(note, sample, threshold, alg):
+def render_note(note, sample, threshold, alg, fullclip):
     scaled = zoom(sample.img, note.frequency, alg)
-    if len(scaled) < note.time + threshold:
+    if fullclip or len(scaled) < note.time + threshold:
         return scaled
     else:
         scaled = scaled[:note.time + threshold]
@@ -161,7 +164,7 @@ def hash_array(arr):
     arr.flags.writeable = True
     return result
 
-def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None):
+def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None, fullclip=False):
     c = 0
     tick = 15
     notecache = {}
@@ -178,7 +181,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     print("Parsing MIDI")
     midi = MIDIParser(inmid, sample, transpose=transpose, speed=speed)
     print("Creating output buffer")
-    outlen = midi.length + 1 + threshold
+    outlen = midi.length + (len(sample.wav) * int(math.ceil(midi.maxmult)) if fullclip else threshold) + 1
     output = np.zeros(outlen, dtype=np.int32)
     print("Rendering audio")
     bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
@@ -189,7 +192,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
                 output[time:time + cachednote.length] += (cachednote.rendered * (note.volume / midi.maxvolume)).astype(np.int32)
                 notecache[(note.time, note.frequency)].used += 1
             else:
-                rendered = render_note(note, sample, threshold, alg)
+                rendered = render_note(note, sample, threshold, alg, fullclip)
                 out_length = min(len(rendered), outlen - time)
                 output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume)).astype(np.int32)
                 notecache[(note.time, note.frequency)] = CachedNote(time, rendered)
@@ -222,7 +225,8 @@ def run_cmd():
     threshold = 0.075
     binsize = 8192
     cachesize = 7.5
-    linear=False
+    fullclip = False
+    linear = False
     if len(sys.argv) <= 3:
         version = "?"
         try:
@@ -240,6 +244,7 @@ options:
   --transpose=0      transpose the midi by n semitones
   --speed=1.0        speed up the midi by this multiplier
   --linear           use a lower quality scaling algorithm that will be a little bit faster
+  --fullclip         no matter how short the note, always use the full sample without cropping
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
   --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))
@@ -248,6 +253,8 @@ options:
         try:
             if arg == "--linear":
                 linear = True
+            elif arg == "--fullclip":
+                fullclip = True
             elif arg.startswith("--transpose="):
                 transpose = int(float(arg[len("--transpose="):]))
             elif arg.startswith("--speed="):
@@ -262,7 +269,7 @@ options:
         except ValueError:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
-    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear, cachesize=cachesize)
+    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear, cachesize=cachesize, fullclip=fullclip)
 
 if __name__ == "__main__":
     run_cmd()
