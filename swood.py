@@ -9,8 +9,8 @@ import progressbar
 import numpy as np
 import pyfftw
 import mido
-pyfftw.interfaces.cache.enable()
 
+pyfftw.interfaces.cache.enable()
 
 class WavFFT:
     def __init__(self, filename, chunksize):
@@ -127,16 +127,63 @@ class MIDIParser:
         # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
-class CachedWavFile:
+class CachedWavFile:  # Stores serialized data
     def __init__(self, length, dtype=np.int32, chunksize=8192):
         self.chunksize = chunksize
         self.savedchunks = 0
+        self.length = math.ceil(length / chunksize) * chunksize
         self.dtype = dtype
         self.chunks = collections.defaultdict(lambda: np.zeros((self.chunksize,), dtype=self.dtype))
         
     def __getitem__(self, key):
         if isinstance(key, int):
-            return self.chunks[key]
+            if key < 0 or key >= self.length
+                raise IndexError()
+            else:
+                return self.chunks[key / self.chunksize][key % self.chunksize]
+        elif isinstance(key, slice):
+            startchunk = math.floor(slice.start / self.chunksize)
+            stopchunk = math.ceil(slice.stop / self.chunksize)
+            offset = slice.start - (startchunk * self.chunksize)
+            length = slice.stop - slice.start
+            for i in range(startchunk, stopchunk+1):
+                if i in self.chunks:
+                    for b in self.chunks[i]:
+                        if offset > 0:
+                            offset -= 1
+                        elif length > 0:
+                            length -= 1
+                            yield b
+                        else:
+                            break
+                            
+                else:
+                    for _ in range(self.chunksize):
+                        if offset > 0:
+                            offset -= 1
+                        elif length > 0:
+                            length -= 1
+                            yield 0
+                        else:
+                            break
+                                
+    def __setitem__(self, key, val):
+        if isinstance(key, int):
+            if key < 0 or key >= self.length
+                raise IndexError()
+            else:
+                self.chunks[int(key / self.chunksize)][key % self.chunksize] = val
+        elif isinstance(key, slice):
+            startchunk = math.floor(slice.start / self.chunksize)
+            stopchunk = math.ceil(slice.stop / self.chunksize)
+            offset = slice.start - (startchunk * self.chunksize)
+            for i in range(startchunk, stopchunk+1):
+                if i in self.chunks:
+                    for b in self.chunks[i]:
+                        yield b
+                else:
+                    for _ in range(self.chunksize):
+                        yield 0
         
     # note to self: http://rafekettler.com/magicmethods.html
         
