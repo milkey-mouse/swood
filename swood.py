@@ -146,9 +146,16 @@ class CachedWavFile:  # Stores serialized data
             stopchunk = math.ceil(slice.stop / self.chunksize)
             offset = slice.start - (startchunk * self.chunksize)
             length = slice.stop - slice.start
+            if startchunk == stopchunk:
+                return self.chunks[startchunk][offset:offset + length]
+            else:
+                ret = []
+                ret.extend(self.chunks[startchunk][offset])
+                for i in range(startchunk+1)
+                ret.extend(self.chunks)
             for i in range(startchunk, stopchunk+1):
                 if i in self.chunks:
-                    for b in self.chunks[i]:
+                    for b in self.chunks[i][max(offset, self.chunksize)::
                         if offset > 0:
                             offset -= 1
                         elif length > 0:
@@ -156,7 +163,6 @@ class CachedWavFile:  # Stores serialized data
                             yield b
                         else:
                             break
-                            
                 else:
                     for _ in range(self.chunksize):
                         if offset > 0:
@@ -177,13 +183,18 @@ class CachedWavFile:  # Stores serialized data
             startchunk = math.floor(slice.start / self.chunksize)
             stopchunk = math.ceil(slice.stop / self.chunksize)
             offset = slice.start - (startchunk * self.chunksize)
-            for i in range(startchunk, stopchunk+1):
-                if i in self.chunks:
-                    for b in self.chunks[i]:
-                        yield b
-                else:
-                    for _ in range(self.chunksize):
-                        yield 0
+            length = slice.stop - slice.start
+            if startchunk == stopchunk:
+                self.chunks[startchunk][offset:length]
+            else:
+                self.chunks[startchunk][offset:] = 
+                for idx, chunk in range(startchunk, stopchunk+1):
+                    if i in self.chunks:
+                        for b in self.chunks[i]:
+                            yield b
+                    else:
+                        for _ in range(self.chunksize):
+                            yield 0
         
     # note to self: http://rafekettler.com/magicmethods.html
         
