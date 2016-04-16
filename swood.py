@@ -137,7 +137,7 @@ class CachedWavFile:  # Stores serialized data
         
     def __getitem__(self, key):
         if isinstance(key, int):
-            if key < 0 or key >= self.length
+            if key < 0 or key >= self.length:
                 raise IndexError()
             else:
                 return self.chunks[key / self.chunksize][key % self.chunksize]
@@ -151,11 +151,9 @@ class CachedWavFile:  # Stores serialized data
             else:
                 ret = []
                 ret.extend(self.chunks[startchunk][offset])
-                for i in range(startchunk+1)
-                ret.extend(self.chunks)
             for i in range(startchunk, stopchunk+1):
                 if i in self.chunks:
-                    for b in self.chunks[i][max(offset, self.chunksize)::
+                    for b in self.chunks[i][max(offset, self.chunksize):]:
                         if offset > 0:
                             offset -= 1
                         elif length > 0:
@@ -175,7 +173,7 @@ class CachedWavFile:  # Stores serialized data
                                 
     def __setitem__(self, key, val):
         if isinstance(key, int):
-            if key < 0 or key >= self.length
+            if key < 0 or key >= self.length:
                 raise IndexError()
             else:
                 self.chunks[int(key / self.chunksize)][key % self.chunksize] = val
@@ -187,7 +185,7 @@ class CachedWavFile:  # Stores serialized data
             if startchunk == stopchunk:
                 self.chunks[startchunk][offset:length]
             else:
-                self.chunks[startchunk][offset:] = 
+                #self.chunks[startchunk][offset:] = 
                 for idx, chunk in range(startchunk, stopchunk+1):
                     if i in self.chunks:
                         for b in self.chunks[i]:
