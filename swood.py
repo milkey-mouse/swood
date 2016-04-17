@@ -106,7 +106,9 @@ class MIDIParser:
                     onote = notes[message.note][0][1]
                     multiplier = wav.get_max_freq() / self.note_to_freq(message.note + transpose)
                     self.maxmult = max(self.maxmult, multiplier)
-                    results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
+                    try:
+                        results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
+                    except IndexError:
                     volume -= notes[message.note][0][0]
                     notes[message.note].pop(0)
                     self.notecount += 1
