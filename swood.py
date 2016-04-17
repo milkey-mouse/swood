@@ -109,6 +109,7 @@ class MIDIParser:
                     try:
                         results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
                     except IndexError:
+                        print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
                     volume -= notes[message.note][0][0]
                     notes[message.note].pop(0)
                     self.notecount += 1
