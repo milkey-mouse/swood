@@ -131,6 +131,7 @@ class MIDIParser:
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 class CachedWavFile:  # Stores serialized data
+
     def __init__(self, length, dtype=np.int32, chunksize=8192):
         self.chunksize = chunksize
         self.savedchunks = 0
@@ -202,26 +203,34 @@ class CachedWavFile:  # Stores serialized data
     def add_data(self, idx, data):
         pass
 
-def zoom(img, multiplier, alg):
-    return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=alg), dtype=np.int32).flatten()
+
+class NoteRenderer:
+    def __init__(self, sample, threshold=0.075, alg=Image.BICUBIC, fullclip=False):
+        self.sample = sample
+        self.img = self.sample.img
+        self.threshold = threshold
+        self.fullclip = fullclip
+        self.alg = alg
+        
+    def zoom(self, multiplier):
+        return np.asarray(self.img.resize((int(round(self.img.size[0] * multiplier)), 1), resample=self.alg), dtype=np.int32).flatten()
+
+    def render_note(self, note):
+        scaled = self.zoom(note.frequency)
+        if self.fullclip or len(scaled) < note.time + self.threshold:
+            return scaled
+        else:
+            scaled = scaled[:note.time + self.threshold]
+            # find the nearest/closest zero crossing within the threshold and continue until that
+            cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
+            return scaled[:note.time + cutoff]
 
 
-def render_note(note, sample, threshold, alg, fullclip):
-    scaled = zoom(sample.img, note.frequency, alg)
-    if fullclip or len(scaled) < note.time + threshold:
-        return scaled
-    else:
-        scaled = scaled[:note.time + threshold]
-        # find the nearest/closest zero crossing within the threshold and continue until that
-        cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
-        return scaled[:note.time + cutoff]
-
-
-def hash_array(arr):
-    arr.flags.writeable = False
-    result = hash(arr.data)
-    arr.flags.writeable = True
-    return result
+    def hash_array(self, arr):
+        arr.flags.writeable = False
+        result = hash(arr.data)
+        arr.flags.writeable = True
+        return result
 
 def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None, fullclip=False):
     c = 0
@@ -302,11 +311,11 @@ usage: swood in_wav in_midi out_wav
 options:
   --transpose=0      transpose the midi by n semitones
   --speed=1.0        speed up the midi by this multiplier
-  --linear           use a lower quality scaling algorithm that will be a little bit faster
-  --fullclip         no matter how short the note, always use the full sample without cropping
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
-  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))
+  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory
+  --linear           use a lower quality scaling algorithm that will be a little bit faster
+  --fullclip         no matter how short the note, always use the full sample without cropping""".format(version))
         import importlib   
         if importlib.util.find_spec("swoodlive"):
             print("  --live             listen on midi in and generate the output in realtime")
