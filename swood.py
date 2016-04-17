@@ -307,6 +307,9 @@ options:
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
   --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory""".format(version))
+        import importlib   
+        if importlib.util.find_spec("swoodlive"):
+            print("  --live             listen on midi in and generate the output in realtime")
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
