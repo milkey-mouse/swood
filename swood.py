@@ -74,6 +74,9 @@ class Note:
         self.frequency = frequency
         self.volume = volume
         
+    def __hash__(self):
+        return hash((note.time, note.frequency))
+        
 class CachedNote:
     def __init__(self, time, rendered):
         self.used = 1
@@ -212,6 +215,8 @@ class NoteRenderer:
         self.fullclip = fullclip
         self.alg = alg
         
+        self.notecache = {}
+        
     def zoom(self, multiplier):
         return np.asarray(self.img.resize((int(round(self.img.size[0] * multiplier)), 1), resample=self.alg), dtype=np.int32).flatten()
 
@@ -225,17 +230,52 @@ class NoteRenderer:
             cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
             return scaled[:note.time + cutoff]
 
-
     def hash_array(self, arr):
         arr.flags.writeable = False
         result = hash(arr.data)
         arr.flags.writeable = True
         return result
+        
+    def render(self, midi, pbar=True, clear_cache=True):
+        tick = 15
+        bar = None
+        c = 0
+        if pbar:
+            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+        for time, notes in midi.notes:
+            for note in notes:
+                if hash(note) in self.notecache:
+                    cachednote = self.notecache[hash(note)]
+                    cachednote.used += 1
+                    out_length = min(cachednote.length, outlen - time)
+                    
+                    output[time:time + cachednote.length] += (cachednote.rendered * (note.volume / midi.maxvolume)).astype(np.int32)
+                    
+                else:
+                    rendered = render_note(note, sample, threshold, alg, fullclip)
+                    out_length = min(len(rendered), outlen - time)
+                    
+                    output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume) * self.sample).astype(np.int32)
+                    self.notecache[hash(note)] = CachedNote(time, rendered)
+                if bar is not None:
+                    c += 1
+                    bar.update(c)
+            
+            # cache "garbage collection":
+            # if a CachedNote is more than 7.5 (default) seconds old it removes it from the cache to save mem(e)ory
+            tick += 1
+            if tick == 15:
+                tick = 0
+                for k in list(notecache.keys()):
+                    if (time - self.notecache[k].time) > cachesize and self.notecache[k].used < 3:
+                        del self.notecache[k]
+                        
+        if clear_cache:
+            self.notecache.clear()
 
 def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None, fullclip=False):
-    c = 0
-    tick = 15
-    notecache = {}
+
+    
     if not cachesize:
         cachesize = 7.5
     alg = Image.BILINEAR if linear else Image.BICUBIC
@@ -252,28 +292,8 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     outlen = midi.length + (len(sample.wav) * int(math.ceil(midi.maxmult)) if fullclip else threshold) + 1
     output = np.zeros(outlen, dtype=np.int32)
     print("Rendering audio")
-    bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
-    for time, notes in midi.notes:
-        for note in notes:
-            if (note.time, note.frequency) in notecache:
-                cachednote = notecache[(note.time, note.frequency)]
-                output[time:time + cachednote.length] += (cachednote.rendered * (note.volume / midi.maxvolume)).astype(np.int32)
-                notecache[(note.time, note.frequency)].used += 1
-            else:
-                rendered = render_note(note, sample, threshold, alg, fullclip)
-                out_length = min(len(rendered), outlen - time)
-                output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume)).astype(np.int32)
-                notecache[(note.time, note.frequency)] = CachedNote(time, rendered)
-            c += 1
-            bar.update(c)
-        
-        # cache "garbage collection"
-        tick -= 1
-        if tick == 0:
-            tick = 15
-            for k in list(notecache.keys()):
-                if (time - notecache[k].time) > cachesize and notecache[k].used < 3:
-                    del notecache[k]
+    
+
 
     print("Saving audio")
 
