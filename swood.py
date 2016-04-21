@@ -249,13 +249,13 @@ class NoteRenderer:
                     cachednote.used += 1
                     out_length = min(cachednote.length, outlen - time)
                     
-                    output[time:time + cachednote.length] += (cachednote.rendered * (note.volume / midi.maxvolume)).astype(np.int32)
+                    output[time:time + cachednote.length] += (cachednote.rendered * ((note.volume / midi.maxvolume) * self.sample.volume_mult)).astype(np.int32)
                     
                 else:
                     rendered = render_note(note, sample, threshold, alg, fullclip)
                     out_length = min(len(rendered), outlen - time)
                     
-                    output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume) * self.sample).astype(np.int32)
+                    output[time:time + out_length] += (rendered[:out_length] * (note.volume / midi.maxvolume) * self.sample.volume_mult).astype(np.int32)
                     self.notecache[hash(note)] = CachedNote(time, rendered)
                 if bar is not None:
                     c += 1
