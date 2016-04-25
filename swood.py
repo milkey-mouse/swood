@@ -21,7 +21,7 @@ class WavFFT:
             self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
             self.size = np.int32
             self.fft = None
-            self.maxfreq = None
+            self._maxfreq = None
             dither = False
             if self.sampwidth == 1:
                 self.size = np.int8
@@ -63,10 +63,10 @@ class WavFFT:
         return self.fft
 
     def get_max_freq(self):
-        if not self.maxfreq:
+        if not self._maxfreq:
             fft = self.get_fft()
             self.maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
-        return self.maxfreq
+        return self._maxfreq
 
 class Note:
     def __init__(self, time, frequency, volume):
@@ -208,11 +208,12 @@ class CachedWavFile:  # Stores serialized data
 
 
 class NoteRenderer:
-    def __init__(self, sample, threshold=0.075, alg=Image.BICUBIC, fullclip=False):
+    def __init__(self, sample, threshold=0.075, alg=Image.BICUBIC, fullclip=False, cachesize=7.5):
         self.sample = sample
         self.img = self.sample.img
-        self.threshold = threshold
+        self.threshold = int(threshold * sample.framerate)
         self.fullclip = fullclip
+        self.cachesize = cachesize * sample.framerate
         self.alg = alg
         
         self.notecache = {}
@@ -267,25 +268,19 @@ class NoteRenderer:
             if tick == 15:
                 tick = 0
                 for k in list(notecache.keys()):
-                    if (time - self.notecache[k].time) > cachesize and self.notecache[k].used < 3:
+                    if (time - self.notecache[k].time) > self.cachesize and self.notecache[k].used < 3:
                         del self.notecache[k]
                         
         if clear_cache:
             self.notecache.clear()
 
 def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None, fullclip=False):
-
-    
     if not cachesize:
         cachesize = 7.5
-    alg = Image.BILINEAR if linear else Image.BICUBIC
     print("Loading sample into memory")
     sample = WavFFT(inwav, binsize)
     print("Analyzing sample")
-    ffreq = sample.get_max_freq()
-    threshold = int(float(sample.framerate) * threshold_mult)
-    cachesize *= sample.framerate
-    print("Fundamental Frequency: {} Hz".format(ffreq))
+    print("Fundamental Frequency: {} Hz".format(sample.maxfreq)
     print("Parsing MIDI")
     midi = MIDIParser(inmid, sample, transpose=transpose, speed=speed)
     print("Creating output buffer")
@@ -293,7 +288,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mul
     output = np.zeros(outlen, dtype=np.int32)
     print("Rendering audio")
     
-
+    renderer = NoteRenderer(sample, threshold, Image.BILINEAR if linear else Image.BICUBIC, fullclip, cachesize)
 
     print("Saving audio")
 
