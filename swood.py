@@ -20,8 +20,8 @@ class WavFFT:
             self.chunksize = chunksize
             self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
             self.size = np.int32
-            self.fft = None
             self._maxfreq = None
+            self._fft = None
             dither = False
             if self.sampwidth == 1:
                 self.size = np.int8
@@ -37,11 +37,13 @@ class WavFFT:
             #self.wav -= int(np.average(self.wav))
             self.wav.flags.writeable = False
             self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)) * 0.9)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
-
-    def get_fft(self):
+            
+    @property
+    def fft(self):
         if self.chunksize % 2 != 0:
-            print("Error: bin size must be a multiple of 2")
-        if not self.fft:
+            print("Warning: bin size must be a multiple of 2, correcting automatically")
+            self.chunksize += 1
+        if not self._fft:
             spacing = float(self.framerate) / self.chunksize
             avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
             c = None
@@ -56,16 +58,17 @@ class WavFFT:
                 del data
                 del fft
             if max(avgdata) == 0:
+                print("Warning: Chunk size too large for sound file. Dividing by 2 and trying again.")
                 self.chunksize = self.chunksize // 2
-                self.fft = self.get_fft()
+                self._fft = self.fft
             else:
-                self.fft = (avgdata, spacing)
-        return self.fft
+                self._fft = (avgdata, spacing)
+        return self._fft
 
     def get_max_freq(self):
         if not self._maxfreq:
             fft = self.get_fft()
-            self.maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
+            self._maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
         return self._maxfreq
         
    def __getitem__(self, key):
@@ -277,13 +280,17 @@ class NoteRenderer:
         if clear_cache:
             self.notecache.clear()
 
-def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold_mult=0.075, linear=False, cachesize=None, fullclip=False):
-    if not cachesize:
-        cachesize = 7.5
+def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold=0.075, linear=False, cachesize=7.5, fullclip=False):
+    if binsize < 2:
+        print("Error: Your suggested bin size is too low.")
+    if speed == 0.0:
+        print("Error: The speed must be a positive number.")
+    if threshold < 0:
+        print("Error: The threshold must be ")
     print("Loading sample into memory")
     sample = WavFFT(inwav, binsize)
     print("Analyzing sample")
-    print("Fundamental Frequency: {} Hz".format(sample.maxfreq)
+    print("Fundamental Frequency: {} Hz".format(sample.maxfreq))
     print("Parsing MIDI")
     midi = MIDIParser(inmid, sample, transpose=transpose, speed=speed)
     print("Creating output buffer")
@@ -336,7 +343,7 @@ options:
   --fullclip         no matter how short the note, always use the full sample without cropping""".format(version))
         import importlib   
         if importlib.util.find_spec("swoodlive"):
-            print("  --live             listen on midi in and generate the output in realtime")
+            print("  --live             listen on a midi input and generate the output in realtime")
         sys.exit(1)
     for arg in sys.argv[4:]:
         try:
@@ -358,7 +365,7 @@ options:
         except ValueError:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
-    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose=transpose, speed=speed, threshold_mult=threshold, binsize=binsize, linear=linear, cachesize=cachesize, fullclip=fullclip)
+    run(sys.argv[1], sys.argv[2], sys.argv[3], transpose, speed, threshold, binsize, linear, cachesize, fullclip)
 
 if __name__ == "__main__":
     run_cmd()
