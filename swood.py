@@ -67,6 +67,9 @@ class WavFFT:
             fft = self.get_fft()
             self.maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
         return self._maxfreq
+        
+   def __getitem__(self, key):
+       setattr(vars(self), 
 
 class Note:
     def __init__(self, time, frequency, volume):
@@ -97,7 +100,7 @@ class MIDIParser:
             time = 0
             for message in mid:
                 time += message.time
-                if "channel" in message.__dict__ and message.channel == 10:
+                if "channel" in vars(message) and message.channel == 10:
                     continue  # channel 10 is reserved for percussion
                 if message.type == "note_on":
                     note_volume = 1 if message.velocity == 0 else message.velocity / 127
