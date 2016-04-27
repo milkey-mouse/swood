@@ -65,14 +65,12 @@ class WavFFT:
                 self._fft = (avgdata, spacing)
         return self._fft
 
+    @property
     def get_max_freq(self):
         if not self._maxfreq:
             fft = self.get_fft()
             self._maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
         return self._maxfreq
-        
-   def __getitem__(self, key):
-       setattr(vars(self), 
 
 class Note:
     def __init__(self, time, frequency, volume):
