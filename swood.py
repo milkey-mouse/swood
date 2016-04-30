@@ -12,65 +12,11 @@ import mido
 
 pyfftw.interfaces.cache.enable()
 
-class WavFFT:
-    def __init__(self, filename, chunksize):
-        with wave.open(filename, "r") as wavfile:
-            self.sampwidth = wavfile.getsampwidth()
-            self.framerate = wavfile.getframerate()
-            self.chunksize = chunksize
-            self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
-            self.size = np.int32
-            self._maxfreq = None
-            self._fft = None
-            dither = False
-            if self.sampwidth == 1:
-                self.size = np.int8
-            elif self.sampwidth == 2:
-                self.size = np.int16
-            self.wav = np.zeros(wavfile.getnframes(), dtype=self.size)
-            if self.sampwidth > 4:
-                for i in range(0, wavfile.getnframes()):
-                    self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True) / 2 ** 32  # 64-bit int to 32-bit
-            else:
-                for i in range(0, wavfile.getnframes()):
-                    self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
-            #self.wav -= int(np.average(self.wav))
-            self.wav.flags.writeable = False
-            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)) * 0.9)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
-            
-    @property
-    def fft(self):
-        if self.chunksize % 2 != 0:
-            print("Warning: bin size must be a multiple of 2, correcting automatically")
-            self.chunksize += 1
-        if not self._fft:
-            spacing = float(self.framerate) / self.chunksize
-            avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
-            c = None
-            offset = None
-            for i in range(0, len(self.wav), self.chunksize):
-                data = np.array(self.wav[i:i + self.chunksize], dtype=self.size)
-                if len(data) != self.chunksize:
-                    continue
-                fft = pyfftw.interfaces.numpy_fft.fft(data)
-                fft = np.abs(fft[:self.chunksize // 2])
-                avgdata += fft
-                del data
-                del fft
-            if max(avgdata) == 0:
-                print("Warning: Chunk size too large for sound file. Dividing by 2 and trying again.")
-                self.chunksize = self.chunksize // 2
-                self._fft = self.fft
-            else:
-                self._fft = (avgdata, spacing)
-        return self._fft
-
-    @property
-    def get_max_freq(self):
-        if not self._maxfreq:
-            fft = self.get_fft()
-            self._maxfreq = (np.argmax(fft[0][1:]) * fft[1]) + (fft[1] / 2)
-        return self._maxfreq
+class CalculatedFFT:
+    def __init__(self, avgdata, spacing):
+        self.avgdata = avgdata
+        self.spacing = spacing
+        
 
 class Note:
     def __init__(self, time, frequency, volume):
@@ -87,56 +33,7 @@ class CachedNote:
         self.time = time
         self.rendered = rendered
         self.length = len(rendered)
-
-class MIDIParser:
-    def __init__(self, path, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
-        results = collections.defaultdict(lambda: [])
-        notes = collections.defaultdict(lambda: [])
-        self.notecount = 0
-        self.maxnotes = 0
-        self.maxvolume = 0
-        self.maxmult = 0
-        volume = 0
-        with mido.MidiFile(path, "r") as mid:
-            time = 0
-            for message in mid:
-                time += message.time
-                if "channel" in vars(message) and message.channel == 10:
-                    continue  # channel 10 is reserved for percussion
-                if message.type == "note_on":
-                    note_volume = 1 if message.velocity == 0 else message.velocity / 127
-                    notes[message.note].append((note_volume, time))
-                    volume += note_volume
-                    self.maxvolume = max(volume, self.maxvolume)
-                    self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
-                elif message.type == "note_off":
-                    onote = notes[message.note][0][1]
-                    multiplier = wav.get_max_freq() / self.note_to_freq(message.note + transpose)
-                    self.maxmult = max(self.maxmult, multiplier)
-                    try:
-                        results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
-                    except IndexError:
-                        print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
-                    volume -= notes[message.note][0][0]
-                    notes[message.note].pop(0)
-                    self.notecount += 1
-            if len(notes) != 0:
-                print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
-                for ntime, nlist in notes.items():
-                    for note in nlist:
-                        results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
-                        self.notecount += 1
-            self.notes = sorted(results.items())
-            self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
-            for time, nlist in self.notes:  
-                for i in range(len(nlist)):  # convert all the notes to the class kind
-                    oldnote = nlist[i]
-                    nlist[i] = Note(oldnote[0], oldnote[1], oldnote[2])
-
-    def note_to_freq(self, notenum):
-        # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
-        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
-
+        
 class CachedWavFile:  # Stores serialized data
 
     def __init__(self, length, dtype=np.int32, chunksize=8192):
@@ -209,6 +106,114 @@ class CachedWavFile:  # Stores serialized data
         
     def add_data(self, idx, data):
         pass
+
+class Sample:
+    def __init__(self, filename, chunksize):
+        with wave.open(filename, "r") as wavfile:
+            self.sampwidth = wavfile.getsampwidth()
+            self.framerate = wavfile.getframerate()
+            self.chunksize = chunksize
+            self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
+            self.size = np.int32
+            self._maxfreq = None
+            self._fft = None
+            dither = False
+            if self.sampwidth == 1:
+                self.size = np.int8
+            elif self.sampwidth == 2:
+                self.size = np.int16
+            self.wav = np.zeros(wavfile.getnframes(), dtype=self.size)
+            if self.sampwidth > 4:
+                for i in range(0, wavfile.getnframes()):
+                    self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True) / 2 ** 32  # 64-bit int to 32-bit
+            else:
+                for i in range(0, wavfile.getnframes()):
+                    self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
+            #self.wav -= int(np.average(self.wav))
+            self.wav.flags.writeable = False
+            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)) * 0.9)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            
+    @property
+    def fft(self):
+        if self.chunksize % 2 != 0:
+            print("Warning: bin size must be a multiple of 2, correcting automatically")
+            self.chunksize += 1
+        if not self._fft:
+            spacing = float(self.framerate) / self.chunksize
+            avgdata = np.zeros(self.chunksize // 2, dtype=np.float64)
+            c = None
+            offset = None
+            for i in range(0, len(self.wav), self.chunksize):
+                data = np.array(self.wav[i:i + self.chunksize], dtype=self.size)
+                if len(data) != self.chunksize:
+                    continue
+                fft = pyfftw.interfaces.numpy_fft.fft(data)
+                fft = np.abs(fft[:self.chunksize // 2])
+                avgdata += fft
+                del data
+                del fft
+            if max(avgdata) == 0:
+                print("Warning: Chunk size too large for sound file. Dividing by 2 and trying again.")
+                self.chunksize = self.chunksize // 2
+                self._fft = self.fft
+            else:
+                self._fft = CalculatedFFT(avgdata, spacing)
+        return self._fft
+
+    @property
+    def get_max_freq(self):
+        if not self._maxfreq:
+            self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
+        return self._maxfreq
+
+class MIDIParser:
+    def __init__(self, path, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
+        results = collections.defaultdict(lambda: [])
+        notes = collections.defaultdict(lambda: [])
+        self.notecount = 0
+        self.maxnotes = 0
+        self.maxvolume = 0
+        self.maxmult = 0
+        volume = 0
+        with mido.MidiFile(path, "r") as mid:
+            time = 0
+            for message in mid:
+                time += message.time
+                if "channel" in vars(message) and message.channel == 10:
+                    continue  # channel 10 is reserved for percussion
+                if message.type == "note_on":
+                    note_volume = 1 if message.velocity == 0 else message.velocity / 127
+                    notes[message.note].append((note_volume, time))
+                    volume += note_volume
+                    self.maxvolume = max(volume, self.maxvolume)
+                    self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
+                elif message.type == "note_off":
+                    onote = notes[message.note][0][1]
+                    multiplier = wav.get_max_freq() / self.note_to_freq(message.note + transpose)
+                    self.maxmult = max(self.maxmult, multiplier)
+                    try:
+                        results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
+                    except IndexError:
+                        print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
+                    volume -= notes[message.note][0][0]
+                    notes[message.note].pop(0)
+                    self.notecount += 1
+            if len(notes) != 0:
+                print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
+                for ntime, nlist in notes.items():
+                    for note in nlist:
+                        results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
+                        self.notecount += 1
+            self.notes = sorted(results.items())
+            self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
+            for time, nlist in self.notes:  
+                for i in range(len(nlist)):  # convert all the notes to the class kind
+                    oldnote = nlist[i]
+                    nlist[i] = Note(oldnote[0], oldnote[1], oldnote[2])
+
+    def note_to_freq(self, notenum):
+        # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
+        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 
 class NoteRenderer:
@@ -286,7 +291,7 @@ def run(inwav, inmid, outpath, transpose=0, speed=1, binsize=8192, threshold=0.0
     if threshold < 0:
         print("Error: The threshold must be ")
     print("Loading sample into memory")
-    sample = WavFFT(inwav, binsize)
+    sample = Sample(inwav, binsize)
     print("Analyzing sample")
     print("Fundamental Frequency: {} Hz".format(sample.maxfreq))
     print("Parsing MIDI")
