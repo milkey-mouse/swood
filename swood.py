@@ -1,9 +1,16 @@
+from __future__ import print_function
+import sys
+if sys.version_info.major < 3:
+    print("WARNING: swood.exe requires at least Python 3.4 to run correctly.")
+elif sys.version_info.major == 3 and sys.version_info.minor < 4:
+    print("WARNING: swood.exe requires at least Python 3.4 to run correctly.")
+
+from enum import Enum
 import pkg_resources
 import collections
 import importlib
 import math
 import wave
-import sys
 
 from PIL import Image
 import progressbar
@@ -19,6 +26,12 @@ class DummyPbar:
         pass
 
 
+class FileSaveType(Enum):
+    ARRAY_TO_DISK = 0
+    ARRAY_IN_MEM  = 1
+    SMART_CACHING = 2
+
+
 class Note:
     def __init__(self, time, frequency, volume):
         self.time = time
@@ -26,7 +39,7 @@ class Note:
         self.volume = volume
 
     def __hash__(self):
-        return hash((note.time, note.frequency))
+        return hash((self.time, self.frequency))
 
 
 class CachedNote:
@@ -115,15 +128,16 @@ class CalculatedFFT:
 
 
 class Sample:
-    def __init__(self, filename, binsize):
+    def __init__(self, filename, binsize, volume=0.9, delete_raw_data=True):
         if binsize < 2:
-            print("Error: Your suggested bin size is too low. It should be somewhere around 8192, or higher.")
+            print("Error: Your suggested bin size is too low. It should be somewhere around 8192 (but higher is better).")
             sys.exit(1)
+        self.delete_raw = delete_raw_data
         with wave.open(filename, "r") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
+            self.length = len(wavfile.getnframes())
             self.binsize = binsize
-            self.offset = 2 ** (8 * max(self.sampwidth, 4))  # max 32-bit
             self.size = np.int32
             self._maxfreq = None
             self._fft = None
@@ -132,16 +146,20 @@ class Sample:
                 self.size = np.int8
             elif self.sampwidth == 2:
                 self.size = np.int16
-            self.wav = np.zeros(wavfile.getnframes(), dtype=self.size)
+            self.wav = np.zeros(self.length, dtype=self.size)
             if self.sampwidth > 4:
-                for i in range(0, wavfile.getnframes()):
+                self.sampwidth = 4
+                for i in range(0, self.length):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True) / 2 ** 32  # 64-bit int to 32-bit
             else:
-                for i in range(0, wavfile.getnframes()):
+                for i in range(0, self.length):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
-            #self.wav -= int(np.average(self.wav))
-            self.wav.flags.writeable = False
-            self.img = Image.frombytes("I", (len(self.wav), 1), (self.wav.astype(np.float64) * ((2 ** 32) / (2 ** (8 * self.sampwidth)) * 0.9)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            self.volume = 256 ** self.sampwidth
+            data_mult = 256 ** 4 / 256 ** self.sampwidth * 0.9
+            self.img = Image.frombytes("I", (self.length, 1), (self.wav.astype(np.float64) * data_mult).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            
+    def __len__(self):
+        return self.length
 
     @property
     def fft(self):
@@ -167,11 +185,13 @@ class Sample:
                 self.binsize = self.binsize // 2
                 self._fft = self.fft
             else:
+                if self.delete_raw:
+                    del self.wav
                 self._fft = CalculatedFFT(avgdata, spacing)
         return self._fft
 
     @property
-    def get_max_freq(self):
+    def maxfreq(self):
         if not self._maxfreq:
             self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
         return self._maxfreq
@@ -203,13 +223,18 @@ class MIDIParser:
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
                     onote = notes[message.note][0][1]
-                    multiplier = wav.get_max_freq() / self.note_to_freq(message.note + transpose)
-                    self.maxmult = max(self.maxmult, multiplier)
+                    
+                    
+                    
+                    note_time = int((time - onote) * wav.framerate)
+                    note_pitch = wav.maxfreq / self.note_to_freq(message.note + transpose)
+                    note_volume = notes[message.note][0][0]
                     try:
-                        results[int(round(onote * wav.framerate / speed))].append((int((time - onote) * wav.framerate), multiplier, 1 if message.velocity == 0 else message.velocity / 127))
+                        results[int(round(onote * wav.framerate / speed))].append((note_time, multiplier, note_volume))
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
-                    volume -= notes[message.note][0][0]
+                    self.maxmult = max(self.maxmult, note_pitch
+                    volume -= note_volume
                     notes[message.note].pop(0)
                     self.notecount += 1
             if len(notes) != 0:
@@ -231,16 +256,21 @@ class MIDIParser:
 
 
 class NoteRenderer:
-    def __init__(self, sample, threshold=0.075, alg=Image.BICUBIC, fullclip=False, cachesize=7.5):
+    def __init__(self, sample, volume=0.9, alg=Image.BICUBIC, fullclip=False, threshold=0.075, cachesize=7.5):
         if threshold < 0:
             print("Error: The threshold must be a positive number.")
             sys.exit(1)
-        self.sample = sample
-        self.img = self.sample.img
-        self.threshold = int(threshold * sample.framerate)
-        self.fullclip = fullclip
-        self.cachesize = cachesize * sample.framerate
+        if volume < 0 or volume > 1:
+            print("Error: Volume must be between 0 and 1 (inclusive)")
+            sys.exit(1)
         self.alg = alg
+        self.sample = sample
+        self.volume = volume
+        self.fullclip = fullclip
+        self.img = self.sample.img
+        
+        self.cachesize = cachesize * sample.framerate
+        self.threshold = int(threshold * sample.framerate)
 
         self.notecache = {}
 
@@ -267,8 +297,8 @@ class NoteRenderer:
         tick = 15
         bar = None
         c = 0
-        output_length = midi.length + (len(self.sample.wav) * int(math.ceil(midi.maxmult)) if fullclip else threshold) + 1
-        output = CachedWavFile(output_length) if all_in_memory else np.zeros(len(output_length), dtype=np.int32)
+        output_length = midi.length + (len(self.sample) * int(math.ceil(midi.maxmult)) if self.fullclip else self.threshold) + 1
+        output = CachedWavFile(output_length) if all_in_memory else np.zeros(output_length, dtype=np.int32)
         bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount) if pbar else DummyPbar()
         for time, notes in midi.notes:
             for note in notes:
@@ -277,9 +307,9 @@ class NoteRenderer:
                     rendered_note = self.notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
-                    rendered_note = CachedNote(time, render_note(note))
+                    rendered_note = CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
-                note_volume = ((note.volume / midi.maxvolume) * self.sample.volume_mult)
+                note_volume = ((note.volume / midi.maxvolume) * self.sample.volume)
                 out_length = min(rendered_note.length, len(output) - time)  # cut it off at the end of the file in case of cache shenanigans
                 output[time:time + out_length] += (rendered_note.rendered[:out_length] * note_volume).astype(np.int32)
                 #increment progress bar
@@ -331,6 +361,7 @@ def run_cmd():
     threshold = 0.075
     binsize = 8192
     cachesize = 7.5
+    volume = 0.9
     fullclip = False
     alg = Image.BICUBIC
     if len(sys.argv) <= 3:
@@ -352,6 +383,7 @@ options:
   --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending
   --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch
   --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory
+  --volume=0.9       
   --linear           use a lower quality scaling algorithm that will be a little bit faster
   --fullclip         no matter how short the note, always use the full sample without cropping""".format(version))
         if importlib.util.find_spec("swoodlive"):
@@ -371,6 +403,8 @@ options:
                 threshold = float(arg[len("--threshold="):])
             elif arg.startswith("--binsize="):
                 binsize = int(float(arg[len("--binsize="):]))
+            elif arg.startswith("--volume="):
+                volume = float(arg[len("--volume="):])
             else:
                 print("Unrecognized command-line option '{}'.".format(arg))
                 sys.exit(1)
@@ -379,7 +413,7 @@ options:
             sys.exit(1)
     sample = Sample(sys.argv[1], binsize)
     midi = MIDIParser(sys.argv[2], sample, transpose, speed)
-    renderer = NoteRenderer(sample, sys.argv[3], threshold, alg, fullclip, cachesize)
+    renderer = NoteRenderer(sample, volume, alg, fullclip, threshold, cachesize)
     renderer.render(midi, sys.argv[3])
     #run(sys.argv[1], sys.argv[2], sys.argv[3], transpose, speed, threshold, binsize, linear, cachesize, fullclip)
 
