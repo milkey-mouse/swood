@@ -207,7 +207,7 @@ class MIDIParser:
         self.notecount = 0
         self.maxnotes = 0
         self.maxvolume = 0
-        self.maxmult = 0
+        self.maxpitch = 0
         volume = 0
         with mido.MidiFile(path, "r") as mid:
             time = 0
@@ -223,9 +223,6 @@ class MIDIParser:
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
                     onote = notes[message.note][0][1]
-                    
-                    
-                    
                     note_time = int((time - onote) * wav.framerate)
                     note_pitch = wav.maxfreq / self.note_to_freq(message.note + transpose)
                     note_volume = notes[message.note][0][0]
@@ -233,7 +230,7 @@ class MIDIParser:
                         results[int(round(onote * wav.framerate / speed))].append((note_time, multiplier, note_volume))
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
-                    self.maxmult = max(self.maxmult, note_pitch
+                    self.maxpitch = max(self.maxpitch, note_pitch)
                     volume -= note_volume
                     notes[message.note].pop(0)
                     self.notecount += 1
@@ -297,7 +294,7 @@ class NoteRenderer:
         tick = 15
         bar = None
         c = 0
-        output_length = midi.length + (len(self.sample) * int(math.ceil(midi.maxmult)) if self.fullclip else self.threshold) + 1
+        output_length = midi.length + (len(self.sample) * int(math.ceil(midi.maxpitch * len(self.sample))) if self.fullclip else self.threshold) + 1
         output = CachedWavFile(output_length) if all_in_memory else np.zeros(output_length, dtype=np.int32)
         bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount) if pbar else DummyPbar()
         for time, notes in midi.notes:
