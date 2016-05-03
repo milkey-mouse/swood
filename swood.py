@@ -46,7 +46,10 @@ class CachedNote:
     def __init__(self, time, rendered):
         self.used = 1
         self.time = time
-        self.rendered = rendered
+        self.data = rendered
+        
+    def __len__(self):
+        return len(self.data)
 
 
 class CachedWavFile:  # Stores serialized data
@@ -136,7 +139,7 @@ class Sample:
         with wave.open(filename, "r") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
-            self.length = len(wavfile.getnframes())
+            self.length = wavfile.getnframes()
             self.binsize = binsize
             self.size = np.int32
             self._maxfreq = None
@@ -227,7 +230,7 @@ class MIDIParser:
                     note_pitch = wav.maxfreq / self.note_to_freq(message.note + transpose)
                     note_volume = notes[message.note][0][0]
                     try:
-                        results[int(round(onote * wav.framerate / speed))].append((note_time, multiplier, note_volume))
+                        results[int(round(onote * wav.framerate / speed))].append((note_time, note_pitch, note_volume))
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
                     self.maxpitch = max(self.maxpitch, note_pitch)
@@ -307,8 +310,8 @@ class NoteRenderer:
                     rendered_note = CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = ((note.volume / midi.maxvolume) * self.sample.volume)
-                out_length = min(rendered_note.length, len(output) - time)  # cut it off at the end of the file in case of cache shenanigans
-                output[time:time + out_length] += (rendered_note.rendered[:out_length] * note_volume).astype(np.int32)
+                out_length = min(len(rendered_note), len(output) - time)  # cut it off at the end of the file in case of cache shenanigans
+                output[time:time + out_length] += (rendered_note.data[:out_length] * note_volume).astype(np.int32)
                 #increment progress bar
                 c += 1
                 bar.update(c)
@@ -327,9 +330,9 @@ class NoteRenderer:
             self.notecache.clear()
 
         with wave.open(filename, "w") as outfile:
-            outfile.setframerate(sample.framerate)
             outfile.setnchannels(1)
             outfile.setsampwidth(4)
+            outfile.setframerate(sample.framerate)
             outfile.setnframes(len(output))
             outfile.writeframesraw(output)
 
