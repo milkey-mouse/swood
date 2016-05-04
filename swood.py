@@ -137,6 +137,7 @@ class Sample:
             sys.exit(1)
         self.delete_raw = delete_raw_data
         with wave.open(filename, "r") as wavfile:
+            print(wavfile.getparams())
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
             self.length = wavfile.getnframes()
@@ -157,7 +158,7 @@ class Sample:
             else:
                 for i in range(0, self.length):
                     self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
-            self.volume = 256 ** self.sampwidth
+            self.volume = 256 ** self.sampwidth / (max(self.wav) - min(self.wav))
             data_mult = 256 ** 4 / 256 ** self.sampwidth * 0.9
             self.img = Image.frombytes("I", (self.length, 1), (self.wav.astype(np.float64) * data_mult).astype(np.int32).tobytes(), "raw", "I", 0, 1)
             
@@ -225,12 +226,13 @@ class MIDIParser:
                     self.maxvolume = max(volume, self.maxvolume)
                     self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    onote = notes[message.note][0][1]
-                    note_time = int((time - onote) * wav.framerate)
+                    note_from_cache = notes[message.note][0]
+                    note_time = int(round(note_from_cache[1] * wav.framerate / speed))
+                    note_length = int((time - note_from_cache[1]) * wav.framerate)
                     note_pitch = wav.maxfreq / self.note_to_freq(message.note + transpose)
-                    note_volume = notes[message.note][0][0]
+                    note_volume = note_from_cache[0]
                     try:
-                        results[int(round(onote * wav.framerate / speed))].append((note_time, note_pitch, note_volume))
+                        results[note_time].append((note_length, note_pitch, note_volume))
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
                     self.maxpitch = max(self.maxpitch, note_pitch)
@@ -241,7 +243,7 @@ class MIDIParser:
                 print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
                 for ntime, nlist in notes.items():
                     for note in nlist:
-                        results[int(round(notes[note][0] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
+                        results[int(round(notes[note][0][1] * wav.framerate / speed))].append((int((ntime - time) * wav.framerate), wav.get_max_freq() / self.note_to_freq(note + transpose), 1))
                         self.notecount += 1
             self.notes = sorted(results.items())
             self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
@@ -329,12 +331,10 @@ class NoteRenderer:
         if clear_cache:
             self.notecache.clear()
 
-        with wave.open(filename, "w") as outfile:
-            outfile.setnchannels(1)
-            outfile.setsampwidth(4)
-            outfile.setframerate(sample.framerate)
-            outfile.setnframes(len(output))
-            outfile.writeframesraw(output)
+        with wave.open(filename, "wb") as outfile:
+            outfile.setparams((1, 4, self.sample.framerate, len(output), "NONE", "not compressed"))
+            print(outfile.getparams())
+            outfile.writeframes(output)
 
 
 def run(sample, outfile, midi, renderer):
@@ -412,6 +412,7 @@ options:
             print("Error parsing command-line option '{}'.".format(arg))
             sys.exit(1)
     sample = Sample(sys.argv[1], binsize)
+    print(sample.maxfreq)
     midi = MIDIParser(sys.argv[2], sample, transpose, speed)
     renderer = NoteRenderer(sample, volume, alg, fullclip, threshold, cachesize)
     renderer.render(midi, sys.argv[3])
