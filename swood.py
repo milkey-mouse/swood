@@ -34,23 +34,41 @@ class FileSaveType(Enum):
 
 
 class Note:
-    def __init__(self, time, frequency, volume):
-        self.time = time
-        self.frequency = frequency
+    def __init__(self, length=None, pitch=None, volume=None, starttime=None):
+        self.starttime = starttime
+        self.length = length
         self.volume = volume
+        self.pitch = pitch
+        
 
     def __hash__(self):
-        return hash((self.time, self.frequency))
+        return hash((self.length, self.pitch))
 
 
 class CachedNote:
-    def __init__(self, time, rendered):
+    def __init__(self, length, rendered):
         self.used = 1
-        self.time = time
+        self.length = length
         self.data = rendered
 
     def __len__(self):
         return len(self.data)
+
+
+class UncachedWavFile:
+    def __init__(self, length, filename, framerate, channels=1, dtype=np.int32):
+        self.channels = np.zeros((channels, length), dtype=dtype)
+        self.framerate = framerate
+        self.filename = filename
+        
+    def add_data(self, start, data, channel=0):
+        length = min(self.channels.shape[1] - start, len(data))  # cut it off at the end of the file in case of cache shenanigans
+        self.channels[channel][start:start+length] += data[:length]
+        
+    def save(self):
+        with wave.open(self.filename, "wb") as wavfile:
+            wavfile.setparams((self.channels.shape[0], self.channels.dtype.itemsize, self.framerate, self.channels.shape[1], "NONE", "not compressed"))
+            wavfile.writeframesraw(self.channels.reshape(self.channels.size, order="F"))
 
 
 class CachedWavFile:  # Stores serialized data
@@ -154,7 +172,6 @@ class Sample:
             self.framerate = wavfile.getframerate()
             self.length = wavfile.getnframes()
 
-            self.size = None
             if self.sampwidth == 1:
                 self.size = np.int8
             elif self.sampwidth == 2:
@@ -170,7 +187,7 @@ class Sample:
                 self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
 
             volume_mult = 256 ** (4 - self.sampwidth)
-            self.img = Image.frombytes("I", (self.length, 1), (self.wav.astype(np.float64) * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            self.img = Image.frombytes("I", (self.length, 1), (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
 
     def __len__(self):
         return self.length
@@ -183,8 +200,6 @@ class Sample:
                 self.binsize += 1
             spacing = float(self.framerate) / self.binsize
             avgdata = np.zeros(self.binsize // 2, dtype=np.float64)
-            c = None
-            offset = None
             for i in range(0, len(self.wav), self.binsize):
                 data = np.array(self.wav[i:i + self.binsize], dtype=self.size)
                 if len(data) != self.binsize:
@@ -210,16 +225,14 @@ class Sample:
             self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
         return self._maxfreq
 
-
 class MIDIParser:
     def __init__(self, path, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
         if speed <= 0:
             print("Error: The speed must be a positive number.")
             sys.exit(1)
-        results = collections.defaultdict(lambda: [])
-        notes = collections.defaultdict(lambda: [])
+        results = collections.defaultdict(list)
+        notes = collections.defaultdict(list)
         self.notecount = 0
-        self.maxnotes = 0
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
@@ -230,26 +243,28 @@ class MIDIParser:
                 if "channel" in vars(message) and message.channel == 10:
                     continue  # channel 10 is reserved for percussion
                 if message.type == "note_on":
-                    note_volume = 1 if message.velocity == 0 else message.velocity / 127
-                    notes[message.note].append((note_volume, time))
-                    volume += note_volume
+                    note = Note()
+                    note.starttime = int(round(time * wav.framerate / speed))
+                    note.volume = 1 if message.velocity == 0 else message.velocity / 127
+                    note.pitch = self.note_to_freq(message.note + transpose)
+                    
+                    notes[message.note].append(note)
+                    volume += note.volume
                     self.maxvolume = max(volume, self.maxvolume)
-                    self.maxnotes = max(sum(len(i) for i in notes.values()), self.maxnotes)
                 elif message.type == "note_off":
-                    note_from_cache = notes[message.note][0]
-                    note_time = int(round(note_from_cache[1] * wav.framerate / speed))
-                    note_length = int((time - note_from_cache[1]) * wav.framerate)
-                    note_pitch = self.note_to_freq(message.note + transpose)
-                    note_volume = note_from_cache[0]
-                    volume -= note_volume
+                    note = notes[message.note][0]
+                    note.length = int(time * wav.framerate / speed) - note.starttime
+                    
                     try:
-                        results[note_time].append((note_length, note_pitch, note_volume))
+                        results[note.starttime].append(note)
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
-                    self.maxpitch = max(self.maxpitch, note_pitch)
-
+                    
+                    self.maxpitch = max(self.maxpitch, note.pitch)
                     notes[message.note].pop(0)
+                    volume -= note.volume
                     self.notecount += 1
+                    
             if len(notes) != 0:
                 print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
                 for ntime, nlist in notes.items():
@@ -258,14 +273,10 @@ class MIDIParser:
                         results[int(round(notes[note][0][1] * wav.framerate / speed))].append((note_length, self.note_to_freq(note + transpose), 1))
                         self.notecount += 1
             self.notes = sorted(results.items(), key=operator.itemgetter(0))
-            self.length = self.notes[-1][0] + max(self.notes[-1][1])[0]
-            for time, nlist in self.notes:
-                for i in range(len(nlist)):  # convert all the notes to the class kind
-                    oldnote = nlist[i]
-                    nlist[i] = Note(oldnote[0], oldnote[1], oldnote[2])
+            self.length = max(note.starttime+note.length for note in self.notes[-1][1])
 
     def note_to_freq(self, notenum):
-        # https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
+        # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
         return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 
@@ -287,31 +298,40 @@ class NoteRenderer:
         return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=self.alg), dtype=np.int32).flatten()
 
     def render_note(self, note):
-        scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.frequency)
-        if self.fullclip or len(scaled) < note.time + self.threshold:
+        scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
+        if self.fullclip or len(scaled) < note.length + self.threshold:
             return scaled
         else:
-            scaled = scaled[:note.time + self.threshold]
+            scaled = scaled[:note.length + self.threshold]
             # find the nearest/closest zero crossing within the threshold and continue until that
-            cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
-            return scaled[:note.time + cutoff]
+            cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.length:])])
+            return scaled[:note.length + cutoff]
 
-    def hash_array(self, arr):
-        arr.flags.writeable = False
-        result = hash(arr.data)
-        arr.flags.writeable = True
-        return result
-
-    def render(self, midi, filename, pbar=True, all_in_memory=False, clear_cache=True):
-        tick = 15
-        bar = None
-        c = 0
-        output_length = midi.length + (len(self.sample) * int(math.ceil(midi.maxpitch * len(self.sample))) if self.fullclip else self.threshold) + 1
-        output = CachedWavFile(output_length) if all_in_memory else np.zeros(output_length, dtype=np.int32)
-        bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount) if pbar else DummyPbar()
+    def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
+        if self.fullclip:
+            # leave a small buffer at the end with space for one more sample
+            end_buffer = int(math.ceil(midi.maxpitch * len(self.sample)))
+        else:
+            end_buffer = self.threshold # it has to cut off sounds at the threshold anyway
+        output_length = midi.length + end_buffer
+        
+        if savetype == FileSaveType.SMART_CACHING:
+            output = CachedWavFile(output_length, filename, self.sample.framerate)
+            raise NotImplementedError("Smart caching will be implemented in the future (possibly v. 1.0.1).")
+        else:
+            output = UncachedWavFile(output_length, filename, self.sample.framerate)
+            
+        if pbar:
+            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+            progress = 0
+        
+        caching = self.cachesize > 0
+        
+        if caching:
+            tick = 8
+        
         for time, notes in midi.notes:
             for note in notes:
-                rendered_note = None
                 if hash(note) in self.notecache:
                     rendered_note = self.notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
@@ -319,29 +339,32 @@ class NoteRenderer:
                     rendered_note = CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = note.volume / midi.maxvolume
-                out_length = min(len(rendered_note), len(output) - time)  # cut it off at the end of the file in case of cache shenanigans
-                output[time:time + out_length] += (rendered_note.data[:out_length] * note_volume).astype(np.int32)
-                #increment progress bar
-                c += 1
-                bar.update(c)
+                output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))
+                
+                if pbar:
+                    # increment progress bar
+                    progress += 1
+                    bar.update(progress)
 
-            # cache "garbage collection":
-            # if a CachedNote is more than 7.5 (default) seconds old it removes it from the cache to save mem(e)ory
-            if self.cachesize > 0:
+            
+            if caching:
+                # cache "garbage collection":
+                # if a CachedNote is more than 7.5 (default) seconds old it removes it from the cache to save mem(e)ory
                 tick += 1
-                if tick == 15:
+                if tick == 8:
                     tick = 0
                     for k in list(notecache.keys()):
-                        if time - self.notecache[k].time > self.cachesize and self.notecache[k].used < 3:
+                        if time - self.notecache[k].length > self.cachesize and self.notecache[k].used < 3:
                             del self.notecache[k]
 
         if clear_cache:
             self.notecache.clear()
 
-        with wave.open(filename, "wb") as outfile:
-            outfile.setparams((1, 4, self.sample.framerate, len(output), "NONE", "not compressed"))
-            outfile.writeframes(output)
-
+        if savetype == FileSaveType.ARRAY_IN_MEM:
+            return output.channels
+        else:
+            output.save()
+            
 
 def run_cmd():
     transpose = 0
