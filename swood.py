@@ -61,6 +61,9 @@ class UncachedWavFile:
         self.framerate = framerate
         self.filename = filename
         
+        if not self.filename.endswith(".wav"):
+            self.filename += ".wav"
+        
     def add_data(self, start, data, channel=0):
         length = min(self.channels.shape[1] - start, len(data))  # cut it off at the end of the file in case of cache shenanigans
         self.channels[channel][start:start+length] += data[:length]
@@ -166,6 +169,9 @@ class Sample:
 
         self._maxfreq = None
         self._fft = None
+        
+        if not filename.endswith(".wav"):
+            filename += ".wav"
 
         with wave.open(filename, "rb") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
@@ -226,7 +232,7 @@ class Sample:
         return self._maxfreq
 
 class MIDIParser:
-    def __init__(self, path, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
+    def __init__(self, filename, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
         if speed <= 0:
             print("Error: The speed must be a positive number.")
             sys.exit(1)
@@ -236,7 +242,11 @@ class MIDIParser:
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
-        with mido.MidiFile(path, "r") as mid:
+        
+        if not filename.endswith(".mid"):
+            filename += ".mid"
+            
+        with mido.MidiFile(filename, "r") as mid:
             time = 0
             for message in mid:
                 time += message.time
@@ -252,28 +262,29 @@ class MIDIParser:
                     volume += note.volume
                     self.maxvolume = max(volume, self.maxvolume)
                 elif message.type == "note_off":
-                    note = notes[message.note][0]
-                    note.length = int(time * wav.framerate / speed) - note.starttime
+                    note = notes[message.note].pop(0)
+                    if len(notes[message.note]) == 0:
+                        del notes[message.note]
                     
                     try:
                         results[note.starttime].append(note)
                     except IndexError:
                         print("Warning: There was a note end event at {} seconds with no matching begin event.".format(time))
                     
-                    self.maxpitch = max(self.maxpitch, note.pitch)
-                    notes[message.note].pop(0)
-                    volume -= note.volume
                     self.notecount += 1
+                    volume -= note.volume
+                    self.maxpitch = max(self.maxpitch, note.pitch)
+                    note.length = int(time * wav.framerate / speed) - note.starttime
                     
             if len(notes) != 0:
                 print("Warning: MIDI ended with notes still playing, assuming they end when the MIDI does")
                 for ntime, nlist in notes.items():
                     for note in nlist:
-                        note_length = int((ntime - time) * wav.framerate)
-                        results[int(round(notes[note][0][1] * wav.framerate / speed))].append((note_length, self.note_to_freq(note + transpose), 1))
+                        note.length = int(time * wav.framerate / speed) - note.starttime
+                        
                         self.notecount += 1
             self.notes = sorted(results.items(), key=operator.itemgetter(0))
-            self.length = max(note.starttime+note.length for note in self.notes[-1][1])
+            self.length = max(max(note.starttime+note.length for note in nlist) for _, nlist in self.notes)
 
     def note_to_freq(self, notenum):
         # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
