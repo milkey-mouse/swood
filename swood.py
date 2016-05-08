@@ -25,13 +25,12 @@ import mido
 pyfftw.interfaces.cache.enable()
 
 
+class ComplainToUser(Exception):
+    pass
+
 class DummyPbar:
     def update(i):
         pass
-
-
-class ComplainToUser(Exception):
-    pass
 
 
 class FileSaveType(Enum):
@@ -411,6 +410,8 @@ def run_cmd():
                     alg = Image.BILINEAR
                 elif arg == "--fullclip":
                     fullclip = True
+                elif arg == "--optout":
+                    pass
                 elif arg.startswith("--transpose="):
                     transpose = int(arg[len("--transpose="):])
                 elif arg.startswith("--speed="):
@@ -443,7 +444,7 @@ def run_cmd():
             print(you_tried)
         else:
             tb = traceback.format_exc()
-            if os.environ.get("SWOOD_OPTOUT") is not None or "--optout" in sys.argv:
+            if "--optout" in sys.argv or os.environ.get("SWOOD_OPTOUT") is not None:
                 print("Something went wrong. A bug report will not be sent because of your environment variable/CLI option.")
                 print(tb)
             else:
