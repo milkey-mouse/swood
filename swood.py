@@ -28,6 +28,7 @@ pyfftw.interfaces.cache.enable()
 class ComplainToUser(Exception):
     pass
 
+
 class DummyPbar:
     def update(i):
         pass
