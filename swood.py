@@ -1,18 +1,16 @@
 from __future__ import print_function
 import sys
 
-if sys.version_info.major < 3:
-    print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
-    sys.exit(1)
-elif sys.version_info.major == 3 and sys.version_info.minor < 4:
+if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_info.minor < 4):
     print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
     sys.exit(1)
 
-from warnings import warn
 from enum import Enum
 import pkg_resources
+import http.client
 import collections
 import importlib
+import traceback
 import operator
 import math
 import wave
@@ -32,6 +30,10 @@ class DummyPbar:
         pass
 
 
+class ComplainToUser(Exception):
+    pass
+
+
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1
@@ -44,7 +46,6 @@ class Note:
         self.length = length
         self.volume = volume
         self.pitch = pitch
-        
 
     def __hash__(self):
         return hash((self.length, self.pitch))
@@ -65,12 +66,11 @@ class UncachedWavFile:
         self.channels = np.zeros((channels, length), dtype=dtype)
         self.framerate = framerate
         self.filename = filename
-        
-        
+
     def add_data(self, start, data, channel=0):
         length = min(self.channels.shape[1] - start, len(data))  # cut it off at the end of the file in case of cache shenanigans
-        self.channels[channel][start:start+length] += data[:length]
-        
+        self.channels[channel][start:start + length] += data[:length]
+
     def save(self):
         with wave.open(self.filename, "wb") as wavfile:
             wavfile.setparams((self.channels.shape[0], self.channels.dtype.itemsize, self.framerate, self.channels.shape[1], "NONE", "not compressed"))
@@ -160,12 +160,12 @@ class Sample:
         if binsize >= 512:
             self.binsize = binsize
         else:
-            raise ValueError("Bin size is too low. Absolute minimum is 512.")
+            raise ComplainToUser("Bin size is too low. Absolute minimum is 512.")
 
         if volume > 0:
             self.volume = volume
         else:
-            raise ValueError("Volume canot be a negative number.")
+            raise ComplainToUser("Volume canot be a negative number.")
 
         self.delete_raw = delete_raw_data  # delete raw data after FFT analysis
 
@@ -184,7 +184,7 @@ class Sample:
             elif self.sampwidth == 3 or self.sampwidth == 4:
                 self.size = np.int32
             else:
-                raise NotImplementedError("WAV files higher than 32 bits are not supported.")
+                raise ComplainToUser("WAV files higher than 32 bits are not supported.")
 
             self.wav = np.zeros(self.length, dtype=self.size)
             for i in range(0, self.length):
@@ -200,7 +200,7 @@ class Sample:
     def fft(self):
         if not self._fft:
             if self.binsize % 2 != 0:
-                warn("Bin size must be a multiple of 2, correcting automatically")
+                print("Warning: Bin size must be a multiple of 2, correcting automatically")
                 self.binsize += 1
             spacing = float(self.framerate) / self.binsize
             avgdata = np.zeros(self.binsize // 2, dtype=np.float64)
@@ -214,7 +214,7 @@ class Sample:
                 del data
                 del fft
             if max(avgdata) == 0:
-                warn("Bin size is too large to analyze sample; dividing by 2 and trying again")
+                print("Warning: Bin size is too large to analyze sample; dividing by 2 and trying again")
                 self.binsize = self.binsize // 2
                 self._fft = self.fft
             else:
@@ -229,6 +229,7 @@ class Sample:
             self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
         return self._maxfreq
 
+
 class MIDIParser:
     def __init__(self, filename, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
         if speed <= 0:
@@ -239,7 +240,7 @@ class MIDIParser:
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
-            
+
         with mido.MidiFile(filename, "r") as mid:
             time = 0
             for message in mid:
@@ -251,7 +252,7 @@ class MIDIParser:
                     note.starttime = int(round(time * wav.framerate / speed))
                     note.volume = 1 if message.velocity == 0 else message.velocity / 127
                     note.pitch = self.note_to_freq(message.note + transpose)
-                    
+
                     notes[message.note].append(note)
                     volume += note.volume
                     self.maxvolume = max(volume, self.maxvolume)
@@ -259,26 +260,26 @@ class MIDIParser:
                     note = notes[message.note].pop(0)
                     if len(notes[message.note]) == 0:
                         del notes[message.note]
-                    
+
                     try:
                         results[note.starttime].append(note)
                     except IndexError:
-                        warn("There was a note end event at {} seconds with no matching begin event".format(time))
-                    
+                        print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
+
                     self.notecount += 1
                     volume -= note.volume
                     self.maxpitch = max(self.maxpitch, note.pitch)
                     note.length = int(time * wav.framerate / speed) - note.starttime
-                    
+
             if len(notes) != 0:
-                warn("The MIDI ended with notes still playing, assuming they end when the MIDI does")
+                print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                 for ntime, nlist in notes.items():
                     for note in nlist:
                         note.length = int(time * wav.framerate / speed) - note.starttime
-                        
+
                         self.notecount += 1
             self.notes = sorted(results.items(), key=operator.itemgetter(0))
-            self.length = max(max(note.starttime+note.length for note in nlist) for _, nlist in self.notes)
+            self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
 
     def note_to_freq(self, notenum):
         # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
@@ -316,24 +317,24 @@ class NoteRenderer:
             # leave a small buffer at the end with space for one more sample
             end_buffer = int(math.ceil(midi.maxpitch * len(self.sample)))
         else:
-            end_buffer = self.threshold # it has to cut off sounds at the threshold anyway
+            end_buffer = self.threshold  # it has to cut off sounds at the threshold anyway
         output_length = midi.length + end_buffer
-        
+
         if savetype == FileSaveType.SMART_CACHING:
             output = CachedWavFile(output_length, filename, self.sample.framerate)
-            raise NotImplementedError("Smart caching will be implemented in the future (possibly v. 1.0.1).")
+            raise ComplainToUser("Smart caching will be implemented in the future (possibly v. 1.0.1).")
         else:
             output = UncachedWavFile(output_length, filename, self.sample.framerate)
-            
+
         if pbar:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
             progress = 0
-        
+
         caching = self.cachesize > 0
-        
+
         if caching:
             tick = 8
-        
+
         for time, notes in midi.notes:
             for note in notes:
                 if hash(note) in self.notecache:
@@ -344,7 +345,7 @@ class NoteRenderer:
                     self.notecache[hash(note)] = rendered_note
                 note_volume = note.volume / midi.maxvolume
                 output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))
-                
+
                 if pbar:
                     # increment progress bar
                     progress += 1
@@ -368,69 +369,99 @@ class NoteRenderer:
             return output.channels
         else:
             output.save()
-            
+
 
 def run_cmd():
-    transpose = 0
-    speed = 1.0
-    threshold = 0.075
-    binsize = 8192
-    cachesize = 7.5
-    fullclip = False
-    alg = Image.BICUBIC
-    if len(sys.argv) <= 3:
-        version = "?"
-        try:
-            version = pkg_resources.get_distribution("swood").version
-        except:
-            pass
-        print("swood - the automatic ytpmv generator (v. {})".format(version))
-        print("")
-        print("usage: swood in_wav in_midi out_wav")
-        print("  in_wav: a short wav file to use as the instrument for the midi")
-        print("  in_midi: a midi to output with the wav sample as the instrument")
-        print("  out_wav: location for the finished song as a wav")
-        print("")
-        print("options:")
-        print("  --transpose=0      transpose the midi by n semitones")
-        print("  --speed=1.0        speed up the midi by this multiplier")
-        print("  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending")
-        print("  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch")
-        print("  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory")
-        print("  --linear           use a lower quality scaling algorithm that will be a little bit faster")
-        print("  --fullclip         no matter how short the note, always use the full sample without cropping")
-        if importlib.util.find_spec("swoodlive"):
-            print("  --live             listen on a midi input and generate the output in realtime")
-        return
-    for arg in sys.argv[4:]:
-        try:
-            if arg == "--linear":
-                alg = Image.BILINEAR
-            elif arg == "--fullclip":
-                fullclip = True
-            elif arg.startswith("--transpose="):
-                transpose = int(arg[len("--transpose="):])
-            elif arg.startswith("--speed="):
-                speed = float(arg[len("--speed="):])
-            elif arg.startswith("--threshold="):
-                threshold = float(arg[len("--threshold="):])
-            elif arg.startswith("--binsize="):
-                binsize = int(arg[len("--binsize="):])
+    try:
+        transpose = 0
+        speed = 1.0
+        threshold = 0.075
+        binsize = 8192
+        cachesize = 7.5
+        fullclip = False
+        alg = Image.BICUBIC
+        if len(sys.argv) <= 3:
+            version = "?"
+            try:
+                version = pkg_resources.get_distribution("swood").version
+            except:
+                pass
+            print("swood - the automatic ytpmv generator (v. {})".format(version))
+            print("")
+            print("usage: swood in_wav in_midi out_wav")
+            print("  in_wav: a short wav file to use as the instrument for the midi")
+            print("  in_midi: a midi to output with the wav sample as the instrument")
+            print("  out_wav: location for the finished song as a wav")
+            print("")
+            print("options:")
+            print("  --transpose=0      transpose the midi by n semitones")
+            print("  --speed=1.0        speed up the midi by this multiplier")
+            print("  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending")
+            print("  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch")
+            print("  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory")
+            print("  --linear           use a lower quality scaling algorithm that will be a little bit faster")
+            print("  --fullclip         no matter how short the note, always use the full sample without cropping")
+            print("  --optout           opt out of automatic bug reporting (or you can set the env variable SWOOD_OPTOUT)")
+            if importlib.util.find_spec("swoodlive"):
+                print("  --live             listen on a midi input and generate the output in realtime")
+            return
+        for arg in sys.argv[4:]:
+            try:
+                if arg == "--linear":
+                    alg = Image.BILINEAR
+                elif arg == "--fullclip":
+                    fullclip = True
+                elif arg.startswith("--transpose="):
+                    transpose = int(arg[len("--transpose="):])
+                elif arg.startswith("--speed="):
+                    speed = float(arg[len("--speed="):])
+                elif arg.startswith("--threshold="):
+                    threshold = float(arg[len("--threshold="):])
+                elif arg.startswith("--binsize="):
+                    binsize = int(arg[len("--binsize="):])
+                else:
+                    raise ComplainToUser("Unrecognized command-line option '{}'.".format(arg))
+            except ValueError:
+                raise ComplainToUser("Error parsing command-line option '{}'.".format(arg))
+
+        for i in (1, 2):
+            if not os.path.isfile(sys.argv[i]):
+                ext = ".mid" if i == 2 else ".wav"
+                if os.path.isfile(sys.argv[i] + ext):
+                    sys.argv[i] += ext
+                else:
+                    raise ComplainToUser("No file found at path '{}'.".format(sys.argv[i]), )
+        if not sys.argv[3].endswith(".wav"):
+            sys.argv[3] += ".wav"
+
+        sample = Sample(sys.argv[1], binsize)
+        midi = MIDIParser(sys.argv[2], sample, transpose, speed)
+        renderer = NoteRenderer(sample, alg, fullclip, threshold, cachesize)
+        renderer.render(midi, sys.argv[3])
+    except Exception as you_tried:
+        if isinstance(you_tried, ComplainToUser):
+            print(you_tried)
+        else:
+            tb = traceback.format_exc()
+            if os.environ.get("SWOOD_OPTOUT") is not None or "--optout" in sys.argv:
+                print("Something went wrong. A bug report will not be sent because of your environment variable/CLI option.")
+                print(tb)
             else:
-                raise TypeError("Unrecognized command-line option '{}'.".format(arg))
-        except ValueError:
-            raise TypeError("Error parsing command-line option '{}'.".format(arg))
-    for i in range(1,4):
-        if not os.path.isfile(sys.argv[i]):
-            ext = ".mid" if i == 2 else ".wav"
-            if os.path.isfile(sys.argv[i] + ext):
-                sys.argv[i] += ext
-            else:
-                raise FileNotFoundError("No file found at path '{}'.".format(sys.argv[i]))
-    sample = Sample(sys.argv[1], binsize)
-    midi = MIDIParser(sys.argv[2], sample, transpose, speed)
-    renderer = NoteRenderer(sample, alg, fullclip, threshold, cachesize)
-    renderer.render(midi, sys.argv[3])
+                print("Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
+                try:
+                    conn = http.client.HTTPSConnection("meme.institute")
+                    conn.request("POST", "/swood/bugs/submit", tb)
+                    resp = conn.getresponse().read().decode("utf-8")
+                    if resp == "done":
+                        print("New bug submitted!")
+                    elif resp == "dupe":
+                        print("This bug is already in the queue to be fixed.")
+                    else:
+                        raise Exception
+                except Exception:
+                    traceback.print_exc()
+                    print("Well apparently we can't even send a bug report right. Sorry about that.")
+
 
 if __name__ == "__main__":
     run_cmd()
