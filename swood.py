@@ -69,7 +69,7 @@ class UncachedWavFile:
 
     def add_data(self, start, data, channel=0):
         # cut it off at the end of the file in case of cache shenanigans
-        length = min(self.channels.shape[1] - start, self.channels.shape[0])
+        length = min(self.channels.shape[1] - start, data.shape[1])
         if channel == -1:
             for chan in range(self.channels.shape[0]):
                 self.channels[chan][start:start + length] += data[chan][:length]
@@ -212,15 +212,16 @@ class Sample:
                 self.binsize += 1
             spacing = float(self.framerate) / self.binsize
             avgdata = np.zeros(self.binsize // 2, dtype=np.float64)
-            for i in range(0, len(self.wav), self.binsize):
-                data = np.array(self.wav[i:i + self.binsize], dtype=self.size)
-                if len(data) != self.binsize:
-                    continue
-                fft = pyfftw.interfaces.numpy_fft.fft(data)
-                fft = np.abs(fft[:self.binsize // 2])
-                avgdata += fft
-                del data
-                del fft
+            for chan in range(self.channels):
+                for i in range(0, self.wav.shape[1], self.binsize):
+                    data = np.array(self.wav[chan][i:i + self.binsize], dtype=self.size)
+                    if len(data) != self.binsize:
+                        continue
+                    fft = pyfftw.interfaces.numpy_fft.fft(data)
+                    fft = np.abs(fft[:self.binsize // 2])
+                    avgdata += fft
+                    del data
+                    del fft
             if max(avgdata) == 0:
                 print("Warning: Bin size is too large to analyze sample; dividing by 2 and trying again")
                 self.binsize = self.binsize // 2
@@ -308,7 +309,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=self.alg), dtype=np.int32).flatten()
+        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=self.alg), dtype=np.int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
@@ -316,11 +317,16 @@ class NoteRenderer:
             return scaled
         else:
             cutoffs = []
-            for i in range(self.sample.channels):
-                scaled[i] = scaled[i][:note.length + self.threshold]
+            for chan in range(self.sample.channels):
                 # find the nearest/closest zero crossing within the threshold and continue until that
-                cutoffs.append(np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[i][note.length:])]))
-            merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs))
+                sample_end = np.empty(self.threshold)
+                for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
+                    sample_end[distance] = (val) + (distance * 30)
+                cutoffs.append(np.argmin(sample_end))
+            merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs)), dtype=np.int32)
+            for chan in range(self.sample.channels):
+                cutoff = note.length + cutoffs[chan]
+                merged_channels[chan][:cutoff] = scaled[chan][:cutoff]
             return merged_channels
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
