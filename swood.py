@@ -175,6 +175,7 @@ class Sample:
         with wave.open(filename, "rb") as wavfile:
             self.sampwidth = wavfile.getsampwidth()
             self.framerate = wavfile.getframerate()
+            self.channels = wavfile.getnchannels()
             self.length = wavfile.getnframes()
 
             if self.sampwidth == 1:
@@ -186,12 +187,14 @@ class Sample:
             else:
                 raise ComplainToUser("WAV files higher than 32 bits are not supported.")
 
-            self.wav = np.zeros(self.length, dtype=self.size)
+            self.wav = np.zeros((self.channels, self.length), dtype=self.size)
             for i in range(0, self.length):
-                self.wav[i] = int.from_bytes(wavfile.readframes(1)[:self.sampwidth], byteorder="little", signed=True)
+                frame = wavfile.readframes(1)
+                for chan in range(self.channels):
+                    self.wav[chan][i] = int.from_bytes(frame[self.sampwidth*chan:self.sampwidth*(chan+1)], byteorder="little", signed=True)
 
             volume_mult = 256 ** (4 - self.sampwidth)
-            self.img = Image.frombytes("I", (self.length, 1), (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+            self.img = Image.frombytes("I", (self.length, self.channels), (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
 
     def __len__(self):
         return self.length
@@ -307,10 +310,13 @@ class NoteRenderer:
         if self.fullclip or len(scaled) < note.length + self.threshold:
             return scaled
         else:
-            scaled = scaled[:note.length + self.threshold]
-            # find the nearest/closest zero crossing within the threshold and continue until that
-            cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.length:])])
-            return scaled[:note.length + cutoff]
+            cutoffs = []
+            for i in range(self.sample.channels):
+                scaled[i] = scaled[i][:note.length + self.threshold]
+                # find the nearest/closest zero crossing within the threshold and continue until that
+                cutoffs.append(np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[i][note.length:])]))
+            merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs))
+            return merged_channels
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
         if self.fullclip:
@@ -321,10 +327,10 @@ class NoteRenderer:
         output_length = midi.length + end_buffer
 
         if savetype == FileSaveType.SMART_CACHING:
-            output = CachedWavFile(output_length, filename, self.sample.framerate)
+            #output = CachedWavFile(output_length, filename, self.sample.framerate)
             raise ComplainToUser("Smart caching will be implemented in the future (possibly v. 1.0.1).")
         else:
-            output = UncachedWavFile(output_length, filename, self.sample.framerate)
+            output = UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
 
         if pbar:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
