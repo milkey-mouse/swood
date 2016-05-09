@@ -68,8 +68,13 @@ class UncachedWavFile:
         self.filename = filename
 
     def add_data(self, start, data, channel=0):
-        length = min(self.channels.shape[1] - start, len(data))  # cut it off at the end of the file in case of cache shenanigans
-        self.channels[channel][start:start + length] += data[:length]
+        # cut it off at the end of the file in case of cache shenanigans
+        length = min(self.channels.shape[1] - start, self.channels.shape[0])
+        if channel == -1:
+            for chan in range(self.channels.shape[0]):
+                self.channels[chan][start:start + length] += data[chan][:length]
+        else:
+            self.channels[channel][start:start + length] += data[:length]
 
     def save(self):
         with wave.open(self.filename, "wb") as wavfile:
@@ -303,7 +308,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), 1), resample=self.alg), dtype=np.int32).flatten()
+        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=self.alg), dtype=np.int32).flatten()
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
@@ -350,7 +355,7 @@ class NoteRenderer:
                     rendered_note = CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = note.volume / midi.maxvolume
-                output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))
+                output.add_data(time, (rendered_note.data * note_volume).astype(np.int32), channel=-1)
 
                 if pbar:
                     # increment progress bar
@@ -438,7 +443,7 @@ def run_cmd():
                 if os.path.isfile(sys.argv[i] + ext):
                     sys.argv[i] += ext
                 else:
-                    raise ComplainToUser("No file found at path '{}'.".format(sys.argv[i]), )
+                    raise ComplainToUser("No file found at path '{}'.".format(sys.argv[i]))
         if not sys.argv[3].endswith(".wav"):
             sys.argv[3] += ".wav"
 
