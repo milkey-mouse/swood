@@ -178,28 +178,31 @@ class Sample:
         self._fft = None
 
         with wave.open(filename, "rb") as wavfile:
-            self.sampwidth = wavfile.getsampwidth()
-            self.framerate = wavfile.getframerate()
-            self.channels = wavfile.getnchannels()
-            self.length = wavfile.getnframes()
+            try:
+                self.sampwidth = wavfile.getsampwidth()
+                self.framerate = wavfile.getframerate()
+                self.channels = wavfile.getnchannels()
+                self.length = wavfile.getnframes()
 
-            if self.sampwidth == 1:
-                self.size = np.int8
-            elif self.sampwidth == 2:
-                self.size = np.int16
-            elif self.sampwidth == 3 or self.sampwidth == 4:
-                self.size = np.int32
-            else:
-                raise ComplainToUser("WAV files higher than 32 bits are not supported.")
+                if self.sampwidth == 1:
+                    self.size = np.int8
+                elif self.sampwidth == 2:
+                    self.size = np.int16
+                elif self.sampwidth == 3 or self.sampwidth == 4:
+                    self.size = np.int32
+                else:
+                    raise wave.Error
 
-            self.wav = np.zeros((self.channels, self.length), dtype=self.size)
-            for i in range(0, self.length):
-                frame = wavfile.readframes(1)
-                for chan in range(self.channels):
-                    self.wav[chan][i] = int.from_bytes(frame[self.sampwidth*chan:self.sampwidth*(chan+1)], byteorder="little", signed=True)
+                self.wav = np.zeros((self.channels, self.length), dtype=self.size)
+                for i in range(0, self.length):
+                    frame = wavfile.readframes(1)
+                    for chan in range(self.channels):
+                        self.wav[chan][i] = int.from_bytes(frame[self.sampwidth*chan:self.sampwidth*(chan+1)], byteorder="little", signed=True)
+            except wave.Error:
+                raise ComplainToUser("This WAV type is not supported. Try opening the file in Audacity and exporting it as a standard WAV.")
 
-            volume_mult = 256 ** (4 - self.sampwidth)
-            self.img = Image.frombytes("I", (self.length, self.channels), (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
+        volume_mult = 256 ** (4 - self.sampwidth)
+        self.img = Image.frombytes("I", (self.length, self.channels), (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes(), "raw", "I", 0, 1)
 
     def __len__(self):
         return self.length
@@ -250,45 +253,51 @@ class MIDIParser:
         self.maxpitch = 0
         volume = 0
 
-        with mido.MidiFile(filename, "r") as mid:
-            time = 0
-            for message in mid:
-                time += message.time
-                if "channel" in vars(message) and message.channel == 10:
-                    continue  # channel 10 is reserved for percussion
-                if message.type == "note_on":
-                    note = Note()
-                    note.starttime = int(round(time * wav.framerate / speed))
-                    note.volume = 1 if message.velocity == 0 else message.velocity / 127
-                    note.pitch = self.note_to_freq(message.note + transpose)
+        try:
+            with mido.MidiFile(filename, "r") as mid:
+                time = 0
+                for message in mid:
+                    time += message.time
+                    if "channel" in vars(message) and message.channel == 10:
+                        continue  # channel 10 is reserved for percussion
+                    if message.type == "note_on":
+                        note = Note()
+                        note.starttime = int(round(time * wav.framerate / speed))
+                        note.volume = 1 if message.velocity == 0 else message.velocity / 127
+                        note.pitch = self.note_to_freq(message.note + transpose)
 
-                    notes[message.note].append(note)
-                    volume += note.volume
-                    self.maxvolume = max(volume, self.maxvolume)
-                elif message.type == "note_off":
-                    note = notes[message.note].pop(0)
-                    if len(notes[message.note]) == 0:
-                        del notes[message.note]
+                        notes[message.note].append(note)
+                        volume += note.volume
+                        self.maxvolume = max(volume, self.maxvolume)
+                    elif message.type == "note_off":
+                        note = notes[message.note].pop(0)
+                        if len(notes[message.note]) == 0:
+                            del notes[message.note]
 
-                    try:
-                        results[note.starttime].append(note)
-                    except IndexError:
-                        print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
-
-                    self.notecount += 1
-                    volume -= note.volume
-                    self.maxpitch = max(self.maxpitch, note.pitch)
-                    note.length = int(time * wav.framerate / speed) - note.starttime
-
-            if len(notes) != 0:
-                print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
-                for ntime, nlist in notes.items():
-                    for note in nlist:
-                        note.length = int(time * wav.framerate / speed) - note.starttime
+                        try:
+                            results[note.starttime].append(note)
+                        except IndexError:
+                            print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
 
                         self.notecount += 1
-            self.notes = sorted(results.items(), key=operator.itemgetter(0))
-            self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
+                        volume -= note.volume
+                        self.maxpitch = max(self.maxpitch, note.pitch)
+                        note.length = int(time * wav.framerate / speed) - note.starttime
+
+                if len(notes) != 0:
+                    print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
+                    for ntime, nlist in notes.items():
+                        for note in nlist:
+                            note.length = int(time * wav.framerate / speed) - note.starttime
+                            self.notecount += 1
+                            
+                if self.notecount == 0:
+                    raise ComplainToUser("This MIDI file doesn't have any notes in it!")
+                            
+                self.notes = sorted(results.items(), key=operator.itemgetter(0))
+                self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
+        except (IOError, IndexError):
+            raise ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
 
     def note_to_freq(self, notenum):
         # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
@@ -398,11 +407,11 @@ def run_cmd():
         fullclip = False
         alg = Image.BICUBIC
         if len(sys.argv) <= 3:
-            version = "?"
+            
             try:
                 version = pkg_resources.get_distribution("swood").version
-            except:
-                pass
+            except pkg_resources.DistributionNotFound:
+                version = "?"
             print("swood - the automatic ytpmv generator (v. {})".format(version))
             print("")
             print("usage: swood in_wav in_midi out_wav")
@@ -459,7 +468,7 @@ def run_cmd():
         renderer.render(midi, sys.argv[3])
     except Exception as you_tried:
         if isinstance(you_tried, ComplainToUser):
-            print(you_tried)
+            print("Error: {}".format(you_tried))
         else:
             tb = traceback.format_exc()
             if "--optout" in sys.argv or os.environ.get("SWOOD_OPTOUT") is not None:
