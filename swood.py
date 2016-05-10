@@ -81,51 +81,6 @@ class UncachedWavFile:
             wavfile.setparams((self.channels.shape[0], self.channels.dtype.itemsize, self.framerate, self.channels.shape[1], "NONE", "not compressed"))
             wavfile.writeframesraw(self.channels.reshape(self.channels.size, order="F"))
 
-
-class CachedWavFile:  # Stores serialized data
-    def __init__(self, length, dtype=np.int32, binsize=8192):
-        self.binsize = binsize
-        self.savedchunks = 0
-        self.length = math.ceil(length / binsize) * binsize
-        self.dtype = dtype
-        self.chunks = collections.defaultdict(lambda: np.zeros((self.binsize, ), dtype=self.dtype))
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            if key < 0 or key >= self.length:
-                raise IndexError()
-            else:
-                return self.chunks[key / self.binsize][key % self.binsize]
-        elif isinstance(key, slice):
-            startchunk = math.floor(slice.start / self.binsize)
-            stopchunk = math.ceil(slice.stop / self.binsize)
-            offset = slice.start - (startchunk * self.binsize)
-            length = slice.stop - slice.start
-            if startchunk == stopchunk:
-                return self.chunks[startchunk][offset:offset + length]
-            else:
-                ret = []
-                ret.extend(self.chunks[startchunk][offset])
-            for i in range(startchunk, stopchunk + 1):
-                if i in self.chunks:
-                    for b in self.chunks[i][max(offset, self.binsize):]:
-                        if offset > 0:
-                            offset -= 1
-                        elif length > 0:
-                            length -= 1
-                            yield b
-                        else:
-                            break
-                else:
-                    for _ in range(self.binsize):
-                        if offset > 0:
-                            offset -= 1
-                        elif length > 0:
-                            length -= 1
-                            yield 0
-                        else:
-                            break
-
     def __setitem__(self, key, val):
         if isinstance(key, int):
             if key < 0 or key >= self.length:
@@ -197,7 +152,7 @@ class Sample:
                 for i in range(0, self.length):
                     frame = wavfile.readframes(1)
                     for chan in range(self.channels):
-                        self.wav[chan][i] = int.from_bytes(frame[self.sampwidth*chan:self.sampwidth*(chan+1)], byteorder="little", signed=True)
+                        self.wav[chan][i] = int.from_bytes(frame[self.sampwidth * chan:self.sampwidth * (chan + 1)], byteorder="little", signed=True)
             except wave.Error:
                 raise ComplainToUser("This WAV type is not supported. Try opening the file in Audacity and exporting it as a standard WAV.")
 
@@ -290,10 +245,10 @@ class MIDIParser:
                         for note in nlist:
                             note.length = int(time * wav.framerate / speed) - note.starttime
                             self.notecount += 1
-                            
+
                 if self.notecount == 0:
                     raise ComplainToUser("This MIDI file doesn't have any notes in it!")
-                            
+
                 self.notes = sorted(results.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
         except (IOError, IndexError):
@@ -348,7 +303,7 @@ class NoteRenderer:
 
         if savetype == FileSaveType.SMART_CACHING:
             #output = CachedWavFile(output_length, filename, self.sample.framerate)
-            raise ComplainToUser("Smart caching will be implemented in the future (possibly v. 1.0.1).")
+            raise ComplainToUser("Smart caching will be implemented in the future.")
         else:
             output = UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
 
@@ -407,7 +362,7 @@ def run_cmd():
         fullclip = False
         alg = Image.BICUBIC
         if len(sys.argv) <= 3:
-            
+
             try:
                 version = pkg_resources.get_distribution("swood").version
             except pkg_resources.DistributionNotFound:
