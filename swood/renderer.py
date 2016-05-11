@@ -1,4 +1,6 @@
+from enum import Enum
 import math
+
 from PIL import Image
 import progressbar
 import numpy as np
