@@ -2,6 +2,7 @@ import numpy as np
 
 import wave
 
+
 class UncachedWavFile:
     def __init__(self, length, filename, framerate, channels=1, dtype=np.int32):
         self.channels = np.zeros((channels, length), dtype=dtype)

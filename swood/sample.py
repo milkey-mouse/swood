@@ -5,7 +5,8 @@ import numpy as np
 import pyfftw
 
 pyfftw.interfaces.cache.enable()
-        
+
+
 class CalculatedFFT:
     def __init__(self, avgdata, spacing):
         self.avgdata = avgdata
@@ -93,6 +94,6 @@ class Sample:
         if not self._maxfreq:
             self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
         return self._maxfreq
-        
+
     def __len__(self):
         return self.length

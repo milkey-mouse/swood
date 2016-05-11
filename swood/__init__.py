@@ -26,6 +26,7 @@ import mido
 class ComplainToUser(Exception):
     pass
 
+
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1

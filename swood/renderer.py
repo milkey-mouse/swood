@@ -3,10 +3,12 @@ from PIL import Image
 import progressbar
 import numpy as np
 
+
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1
     SMART_CACHING = 2
+
 
 class NoteRenderer:
     def __init__(self, sample, alg=Image.BICUBIC, fullclip=False, threshold=0.075, cachesize=7.5):

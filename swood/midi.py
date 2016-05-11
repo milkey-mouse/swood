@@ -3,6 +3,7 @@ import operator
 
 import mido
 
+
 class Note:
     def __init__(self, length=None, pitch=None, volume=None, starttime=None):
         self.starttime = starttime
@@ -12,7 +13,7 @@ class Note:
 
     def __hash__(self):
         return hash((self.length, self.pitch))
-        
+
     def __len__(self):
         return len(self.data)
 
@@ -25,6 +26,7 @@ class CachedNote:
 
     def __len__(self):
         return len(self.data)
+
 
 class MIDIParser:
     def __init__(self, filename, wav, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
