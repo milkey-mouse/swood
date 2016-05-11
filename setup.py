@@ -13,14 +13,11 @@ setup(
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
     ],
-    keywords='shitposting memes youtubepoop ytp ytpmvs',
-    packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-
-    py_modules=["swood"],
+    keywords='swood memes youtubepoop ytp ytpmvs',
+    packages=["swood"],
 
     install_requires=['mido', 'numpy', 'Pillow', 'progressbar2', 'pyFFTW'],
 
