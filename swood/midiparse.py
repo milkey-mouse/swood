@@ -3,6 +3,7 @@ import operator
 
 import mido
 
+import complain
 
 class Note:
     def __init__(self, length=None, pitch=None, volume=None, starttime=None):
@@ -49,7 +50,7 @@ class MIDIParser:
                     if message.type == "note_on":
                         note = Note()
                         note.starttime = int(round(time * wav.framerate / speed))
-                        note.volume = 1 if message.velocity == 0 else message.velocity / 127
+                        note.volume = 127 if message.velocity == 0 else message.velocity
                         note.pitch = self.note_to_freq(message.note + transpose)
 
                         notes[message.note].append(note)
@@ -78,12 +79,12 @@ class MIDIParser:
                             self.notecount += 1
 
                 if self.notecount == 0:
-                    raise ComplainToUser("This MIDI file doesn't have any notes in it!")
+                    raise complain.ComplainToUser("This MIDI file doesn't have any notes in it!")
 
                 self.notes = sorted(results.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
         except (IOError, IndexError):
-            raise ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
+            raise complain.ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
 
     def note_to_freq(self, notenum):
         # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard

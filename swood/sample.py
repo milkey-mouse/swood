@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 import pyfftw
 
+
 pyfftw.interfaces.cache.enable()
 
 
@@ -18,24 +19,24 @@ class Sample:
         if binsize >= 512:
             self.binsize = binsize
         else:
-            raise ComplainToUser("Bin size is too low. Absolute minimum is 512.")
+            raise complain.ComplainToUser("Bin size is too low. Absolute minimum is 512.")
 
         if volume > 0:
             self.volume = volume
         else:
-            raise ComplainToUser("Volume canot be a negative number.")
+            raise complain.ComplainToUser("Volume canot be a negative number.")
 
         self.delete_raw = delete_raw_data  # delete raw data after FFT analysis
         self._maxfreq = None
         self._fft = None
 
-        self.wav = self.parse_wav()
+        self.wav = self.parse_wav(filename)
 
         volume_mult = 256 ** (4 - self.sampwidth)
         raw_data = (self.wav * (volume_mult * self.volume)).astype(np.int32).tobytes()
         self.img = Image.frombytes("I", (self.length, self.channels), raw_data, "raw", "I", 0, 1)
 
-    def parse_wav(self):
+    def parse_wav(self, filename):
         with wave.open(filename, "rb") as wavfile:
             try:
                 self.sampwidth = wavfile.getsampwidth()
@@ -59,7 +60,7 @@ class Sample:
                         wav[chan][i] = int.from_bytes(frame[self.sampwidth * chan:self.sampwidth * (chan + 1)], byteorder="little", signed=True)
                 return wav
             except wave.Error:
-                raise ComplainToUser("This WAV type is not supported. Try opening the file in Audacity and exporting it as a standard WAV.")
+                raise complain.ComplainToUser("This WAV type is not supported. Try opening the file in Audacity and exporting it as a standard WAV.")
 
     @property
     def fft(self):

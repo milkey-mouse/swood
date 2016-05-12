@@ -2,6 +2,10 @@ import numpy as np
 
 import wave
 
+import complain
+
+class CachedWavFile:
+    pass
 
 class UncachedWavFile:
     def __init__(self, length, filename, framerate, channels=1, dtype=np.int32):
@@ -19,6 +23,9 @@ class UncachedWavFile:
             self.channels[channel][start:start + length] += data[:length]
 
     def save(self):
-        with wave.open(self.filename, "wb") as wavfile:
-            wavfile.setparams((self.channels.shape[0], self.channels.dtype.itemsize, self.framerate, self.channels.shape[1], "NONE", "not compressed"))
-            wavfile.writeframesraw(self.channels.reshape(self.channels.size, order="F"))
+        try:
+            with wave.open(self.filename, "wb") as wavfile:
+                wavfile.setparams((self.channels.shape[0], self.channels.dtype.itemsize, self.framerate, self.channels.shape[1], "NONE", "not compressed"))
+                wavfile.writeframesraw(self.channels.reshape(self.channels.size, order="F"))
+        except IOError:
+            raise complain.ComplainToUser("Error saving output file '{}'.".format(self.filename))

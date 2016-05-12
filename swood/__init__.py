@@ -5,25 +5,10 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
     print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
     sys.exit(1)
 
-from PIL import Image
-
-import traceback
-import os
-
-
-class ComplainToUser(Exception):
-    pass
-
+import complain
 
 def run_cmd():
-    try:
-        transpose = 0
-        speed = 1.0
-        threshold = 0.075
-        binsize = 8192
-        cachesize = 7.5
-        fullclip = False
-        alg = Image.BICUBIC
+    with complain.ComplaintFormatter():
         if len(sys.argv) <= 3:
             import pkg_resources
             import importlib
@@ -50,6 +35,22 @@ def run_cmd():
             if importlib.util.find_spec("swoodlive"):
                 print("  --live             listen on a midi input and generate the output in realtime")
             return
+        
+        import renderer
+        import wavcache
+        import sample
+        import midiparse
+        from PIL import Image
+        import os
+        
+        transpose = 0
+        speed = 1.0
+        threshold = 0.075
+        binsize = 8192
+        cachesize = 7.5
+        fullclip = False
+        alg = Image.BICUBIC
+        
         for arg in sys.argv[4:]:
             try:
                 if arg == "--linear":
@@ -81,34 +82,11 @@ def run_cmd():
         if not sys.argv[3].endswith(".wav"):
             sys.argv[3] += ".wav"
 
-        sample = Sample(sys.argv[1], binsize)
-        midi = MIDIParser(sys.argv[2], sample, transpose, speed)
-        renderer = NoteRenderer(sample, alg, fullclip, threshold, cachesize)
+        sample = sample.Sample(sys.argv[1], binsize)
+        midi = midiparse.MIDIParser(sys.argv[2], sample, transpose, speed)
+        renderer = renderer.NoteRenderer(sample, alg, fullclip, threshold, cachesize)
         renderer.render(midi, sys.argv[3])
-    except Exception as you_tried:
-        if isinstance(you_tried, ComplainToUser):
-            print("Error: {}".format(you_tried))
-        else:
-            tb = traceback.format_exc()
-            if "--optout" in sys.argv or os.environ.get("SWOOD_OPTOUT") is not None:
-                print("Something went wrong. A bug report will not be sent because of your environment variable/CLI option.")
-                print(tb)
-            else:
-                print("Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
-                try:
-                    import http.client
-                    conn = http.client.HTTPSConnection("meme.institute")
-                    conn.request("POST", "/swood/bugs/submit", tb)
-                    resp = conn.getresponse().read().decode("utf-8")
-                    if resp == "done":
-                        print("New bug submitted!")
-                    elif resp == "dupe":
-                        print("This bug is already in the queue to be fixed.")
-                    else:
-                        raise Exception
-                except Exception:
-                    traceback.print_exc()
-                    print("Well apparently we can't even send a bug report right. Sorry about that.")
+
 
 
 if __name__ == "__main__":

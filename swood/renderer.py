@@ -5,6 +5,8 @@ from PIL import Image
 import progressbar
 import numpy as np
 
+import midiparse
+import wavcache
 
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
@@ -56,9 +58,9 @@ class NoteRenderer:
 
         if savetype == FileSaveType.SMART_CACHING:
             #output = CachedWavFile(output_length, filename, self.sample.framerate)
-            raise ComplainToUser("Smart caching will be implemented in the future.")
+            raise complain.ComplainToUser("Smart caching will be implemented in the future.")
         else:
-            output = UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
+            output = wavcache.UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
 
         if pbar:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
@@ -75,7 +77,7 @@ class NoteRenderer:
                     rendered_note = self.notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
-                    rendered_note = CachedNote(time, self.render_note(note))
+                    rendered_note = midiparse.CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = note.volume / midi.maxvolume
                 output.add_data(time, (rendered_note.data * note_volume).astype(np.int32), channel=-1)
@@ -90,9 +92,9 @@ class NoteRenderer:
                 # cache "garbage collection":
                 # if a CachedNote is more than 7.5 (default) seconds old it removes it from the cache to save mem(e)ory
                 tick += 1
-                if tick == 8:
+                if tick == 15:
                     tick = 0
-                    for k in list(notecache.keys()):
+                    for k in list(self.notecache.keys()):
                         if time - self.notecache[k].length > self.cachesize and self.notecache[k].used < 3:
                             del self.notecache[k]
 
