@@ -48,7 +48,7 @@ class NoteRenderer:
                     sample_end[distance] = (val) + (distance * 30)
                 cutoffs.append(np.argmin(sample_end))
             merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs)), dtype=np.int32)
-            for chan in range(self.sample.channels.shape[0]:
+            for chan in range(self.sample.channels.shape[0]):
                 cutoff = note.length + cutoffs[chan]
                 merged_channels[chan][:cutoff] = scaled[chan][:cutoff]
             return merged_channels
