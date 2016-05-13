@@ -30,7 +30,6 @@ def run_cmd():
             print("  --threshold=0.075  maximum amount of time after a note ends that it can go on for a smoother ending")
             print("  --binsize=8192     FFT bin size for the sample analysis; lower numbers make it faster but more off-pitch")
             print("  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory")
-            print("  --linear           use a lower quality scaling algorithm that will be a little bit faster")
             print("  --fullclip         no matter how short the note, always use the full sample without cropping")
             print("  --optout           opt out of automatic bug reporting (or you can set the env variable SWOOD_OPTOUT)")
             if importlib.util.find_spec("swoodlive"):
