@@ -38,11 +38,9 @@ def run_cmd():
             return
 
         import renderer
-        import wavcache
+        import wavout
         import sample
         import midiparse
-        from PIL import Image
-        import os
 
         transpose = 0
         speed = 1.0
@@ -50,13 +48,10 @@ def run_cmd():
         binsize = 8192
         cachesize = 7.5
         fullclip = False
-        alg = Image.BICUBIC
 
         for arg in sys.argv[4:]:
             try:
-                if arg == "--linear":
-                    alg = Image.BILINEAR
-                elif arg == "--fullclip":
+                if arg == "--fullclip":
                     fullclip = True
                 elif arg == "--optout":
                     pass
@@ -73,19 +68,9 @@ def run_cmd():
             except ValueError:
                 raise ComplainToUser("Error parsing command-line option '{}'.".format(arg))
 
-        for i in (1, 2):
-            if not os.path.isfile(sys.argv[i]):
-                ext = ".mid" if i == 2 else ".wav"
-                if os.path.isfile(sys.argv[i] + ext):
-                    sys.argv[i] += ext
-                else:
-                    raise ComplainToUser("No file found at path '{}'.".format(sys.argv[i]))
-        if not sys.argv[3].endswith(".wav"):
-            sys.argv[3] += ".wav"
-
         sample = sample.Sample(sys.argv[1], binsize)
         midi = midiparse.MIDIParser(sys.argv[2], sample, transpose, speed)
-        renderer = renderer.NoteRenderer(sample, alg, fullclip, threshold, cachesize)
+        renderer = renderer.NoteRenderer(sample, fullclip, threshold, cachesize)
         renderer.render(midi, sys.argv[3])
 
 

@@ -87,7 +87,9 @@ class MIDIParser:
 
                 self.notes = sorted(results.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
-        except (IOError, IndexError):
+        except IOError:
+            raise complain.ComplainToUser("Error opening MIDI file '{}'.".format(filename))
+        except IndexError:
             raise complain.ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
 
     def note_to_freq(self, notenum):

@@ -6,7 +6,7 @@ import progressbar
 import numpy as np
 
 import midiparse
-import wavcache
+import wavout
 
 
 class FileSaveType(Enum):
@@ -16,10 +16,9 @@ class FileSaveType(Enum):
 
 
 class NoteRenderer:
-    def __init__(self, sample, alg=Image.BICUBIC, fullclip=False, threshold=0.075, cachesize=7.5):
+    def __init__(self, sample, fullclip=False, threshold=0.075, cachesize=7.5):
         if threshold < 0:
             return ValueError("The threshold must be a positive number.")
-        self.alg = alg
         self.sample = sample
         self.fullclip = fullclip
 
@@ -29,7 +28,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=self.alg), dtype=np.int32)
+        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
@@ -61,7 +60,7 @@ class NoteRenderer:
             #output = CachedWavFile(output_length, filename, self.sample.framerate)
             raise complain.ComplainToUser("Smart caching will be implemented in the future.")
         else:
-            output = wavcache.UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
+            output = wavout.UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
 
         if pbar:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
@@ -81,7 +80,7 @@ class NoteRenderer:
                     rendered_note = midiparse.CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = note.volume / midi.maxvolume
-                output.add_data(time, (rendered_note.data * note_volume).astype(np.int32), channel=-1)
+                output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))
 
                 if pbar:
                     # increment progress bar
