@@ -7,6 +7,7 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
 
 import complain
 
+
 def run_cmd():
     with complain.ComplaintFormatter():
         if len(sys.argv) <= 3:
@@ -35,14 +36,14 @@ def run_cmd():
             if importlib.util.find_spec("swoodlive"):
                 print("  --live             listen on a midi input and generate the output in realtime")
             return
-        
+
         import renderer
         import wavcache
         import sample
         import midiparse
         from PIL import Image
         import os
-        
+
         transpose = 0
         speed = 1.0
         threshold = 0.075
@@ -50,7 +51,7 @@ def run_cmd():
         cachesize = 7.5
         fullclip = False
         alg = Image.BICUBIC
-        
+
         for arg in sys.argv[4:]:
             try:
                 if arg == "--linear":

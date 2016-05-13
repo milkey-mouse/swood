@@ -5,6 +5,7 @@ import mido
 
 import complain
 
+
 class Note:
     def __init__(self, length=None, pitch=None, volume=None, starttime=None):
         self.starttime = starttime
@@ -14,7 +15,7 @@ class Note:
 
     def __hash__(self):
         return hash((self.length, self.pitch))
-        
+
     def __eq__(self, other):
         return self.length == other.length and self.pitch == other.pitch
 

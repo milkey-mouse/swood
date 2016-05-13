@@ -8,6 +8,7 @@ import numpy as np
 import midiparse
 import wavcache
 
+
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1
@@ -34,18 +35,13 @@ class NoteRenderer:
         scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
         if self.fullclip or len(scaled) < note.length + self.threshold:
             return scaled
-        elif self.sample.channels.shape[0] == 1:
-            scaled = scaled[:note.time + self.threshold]
-            # find the nearest/closest zero crossing within the threshold and continue until that
-            cutoff = np.argmin([abs(i) + (d * 20) for d, i in enumerate(scaled[note.time:])])
-            return scaled[:note.time + cutoff]
         else:
             cutoffs = []
             for chan in range(self.sample.channels.shape[0]):
                 # find the nearest/closest zero crossing within the threshold and continue until that
                 sample_end = np.empty(self.threshold)
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
-                    sample_end[distance] = (val) + (distance * 30)
+                    sample_end[distance] = (val) + (distance * 20)
                 cutoffs.append(np.argmin(sample_end))
             merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs)), dtype=np.int32)
             for chan in range(self.sample.channels.shape[0]):

@@ -2,13 +2,15 @@ import traceback
 import sys
 import os
 
+
 class ComplainToUser(Exception):
     pass
-    
+
+
 class ComplaintFormatter(object):
     def __enter__(self):
         pass
-        
+
     def __exit__(self, exc_type, exc, tb):
         if exc_type == ComplainToUser:
             print("Error: {}".format(exc))

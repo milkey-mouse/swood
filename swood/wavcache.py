@@ -4,8 +4,10 @@ import wave
 
 import complain
 
+
 class CachedWavFile:
     pass
+
 
 class UncachedWavFile:
     def __init__(self, length, filename, framerate, channels=1, dtype=np.int32):

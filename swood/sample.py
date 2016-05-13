@@ -4,7 +4,6 @@ from PIL import Image
 import numpy as np
 import pyfftw
 
-
 pyfftw.interfaces.cache.enable()
 
 
