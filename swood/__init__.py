@@ -36,10 +36,10 @@ def run_cmd():
                 print("  --live             listen on a midi input and generate the output in realtime")
             return
 
-        import renderer
-        import wavout
-        import sample
         import midiparse
+        import renderer
+        import sample
+        
 
         transpose = 0
         speed = 1.0
