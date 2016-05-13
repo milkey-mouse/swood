@@ -79,7 +79,7 @@ class NoteRenderer:
                 else:
                     rendered_note = midiparse.CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
-                note_volume = note.volume / midi.maxvolume
+                note_volume = (note.volume / midi.maxvolume) * self.sample.volume
                 output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))
 
                 if pbar:
