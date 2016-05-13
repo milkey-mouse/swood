@@ -14,6 +14,9 @@ class Note:
 
     def __hash__(self):
         return hash((self.length, self.pitch))
+        
+    def __eq__(self, other):
+        return self.length == other.length and self.pitch == other.pitch
 
     def __len__(self):
         return len(self.data)
