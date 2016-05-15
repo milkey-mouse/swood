@@ -1,6 +1,6 @@
 from PIL import Image
 import numpy as np
-import complain
+import swood.complain
 import pyfftw
 import wave
 

@@ -1,11 +1,5 @@
-from __future__ import print_function
+import swood.complain
 import sys
-
-if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_info.minor < 4):
-    print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
-    sys.exit(1)
-
-import complain
 
 
 def run_cmd():

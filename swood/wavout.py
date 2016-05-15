@@ -1,6 +1,6 @@
 import numpy as np
+import swood.complain
 import wave
-import complain
 
 
 class CachedWavFile:

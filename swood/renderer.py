@@ -5,8 +5,8 @@ from PIL import Image
 import progressbar
 import numpy as np
 
-import midiparse
-import wavout
+import swood.midiparse
+import swood.wavout
 
 
 class FileSaveType(Enum):
