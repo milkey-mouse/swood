@@ -6,19 +6,28 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
     sys.exit(1)
     
 import platform
-
-from setuptools import setup
 import importlib
 import warnings
 import ctypes
 import os
 
+warnings.filterwarnings("ignore")
+
 try:
     import pip
 except ImportError:
-    print("Please download and install pip to set up swood.exe.")
+    print("Installing pip...")
+    import http.client
+    conn = http.client.HTTPSConnection("bootstrap.pypa.io")
+    conn.request("GET", "/get-pip.py")
+    res = conn.getresponse()
+    pfile = res.read()
+    booststrap = compile(pfile.decode("utf-8"), "get-pip.py", "exec")
+    ns = {}
+    exec(bootstrap, ns)
+    del ns
 
-warnings.filterwarnings("ignore")
+from setuptools import setup
 
 def get_flags():
     sse4 = False
@@ -124,16 +133,11 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
     if "pillow-simd" in pkgs:
         print("Pillow-SIMD is already installed. swood will install with SIMD support.")
         simd = True
-    elif os.name() not in ("posix", "mac"):
-        print("This system may not be able to build pillow-simd. SIMD support is disabled.")
-        if os.name() == "nt":
-            #use wheel
-        else:
-            print("With the right prerequisites, you may be able to build it:")
-            print("https://github.com/uploadcare/pillow-simd/blob/3.2.x-simd/winbuild/build.rst")
-        simd=False
     elif platform.machine() not in ("i386", "x86_64"):
         simd = False
+    elif os.name() not in ("posix", "mac", "nt"):
+        print("This system may not be able to build pillow-simd. SIMD support is disabled.")
+        simd=False`
     else:
         sse4, avx2 = get_flags()
         if avx2:

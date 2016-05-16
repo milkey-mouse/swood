@@ -41,3 +41,26 @@ class CachedWavFile:  # Stores serialized data
                             yield 0
                         else:
                             break
+                            
+from os.path import exists, join
+from os import pathsep
+from string import spli
+def search_file(filename, search_path):
+   file_found = 0
+   paths = string.split(search_path, pathsep)
+   for path in paths:
+      if exists(join(path, filename)):
+          file_found = 1
+          break
+   if file_found:
+      return os.path.abspath(join(path, filename))
+   else:
+      return None
+
+if __name__ == '___main__':
+   search_path = os.environ["PATH"]
+   find_file = search_file('ls',search_path)
+   if find_file:
+      print "File found at %s" % find_file
+   else:
+      print "File not found"
