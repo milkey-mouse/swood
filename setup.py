@@ -7,9 +7,6 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
     
 import platform
 
-if platform.python_implementation() != "CPython":
-    print("Warning: swood has only been tested, and probably only works on, CPython.")
-
 from setuptools import setup
 import importlib
 import warnings
@@ -22,11 +19,6 @@ except ImportError:
     print("Please download and install pip to set up swood.exe.")
 
 warnings.filterwarnings("ignore")
-
-# This code is terrible and weird. It tries to embed assembly in Python,
-# tricks the interpreter into thinking data is functions, and makes pip
-# install things thinking it's running separately. Here be dragons. Don't
-# touch it and it may work....
 
 def get_flags():
     sse4 = False
@@ -129,12 +121,19 @@ def get_flags():
 simd = False
 if len(sys.argv) > 1 and sys.argv[1] == "install":
     pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
-    arch = platform.machine()
-    if not (arch == "i386" or arch == "x86_64"):
-        simd = False
-    elif "pillow-simd" in pkgs:
+    if "pillow-simd" in pkgs:
         print("Pillow-SIMD is already installed. swood will install with SIMD support.")
         simd = True
+    elif os.name() not in ("posix", "mac"):
+        print("This system may not be able to build pillow-simd. SIMD support is disabled.")
+        if os.name() == "nt":
+            #use wheel
+        else:
+            print("With the right prerequisites, you may be able to build it:")
+            print("https://github.com/uploadcare/pillow-simd/blob/3.2.x-simd/winbuild/build.rst")
+        simd=False
+    elif platform.machine() not in ("i386", "x86_64"):
+        simd = False
     else:
         sse4, avx2 = get_flags()
         if avx2:
