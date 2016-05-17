@@ -24,8 +24,12 @@ except ImportError:
     pfile = res.read()
     booststrap = compile(pfile.decode("utf-8"), "get-pip.py", "exec")
     ns = {}
-    exec(bootstrap, ns)
+    try:
+        exec(bootstrap, ns)
+    except SystemExit:
+        pass
     del ns
+    import pip
 
 from setuptools import setup
 
@@ -131,13 +135,12 @@ simd = False
 if len(sys.argv) > 1 and sys.argv[1] == "install":
     pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
     if "pillow-simd" in pkgs:
-        print("Pillow-SIMD is already installed. swood will install with SIMD support.")
+        print("pillow-simd is already installed. swood will install with SIMD support.")
         simd = True
     elif platform.machine() not in ("i386", "x86_64"):
         simd = False
-    elif os.name() not in ("posix", "mac", "nt"):
-        print("This system may not be able to build pillow-simd. SIMD support is disabled.")
-        simd=False`
+    elif os.name() != "posix":
+        simd = False
     else:
         sse4, avx2 = get_flags()
         if avx2:
@@ -147,42 +150,21 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
         elif sse4:
             print("Your processor supports SSE4. swood will install with SIMD support.")
             simd = True
-        
-    if simd:
-        if "pillow" in pkgs:
-            print("############################################################")
-            print("Pillow will be replaced by pillow-simd, which takes advantage of certain CPU features.")
-            print("To revert this change, simply run `pip uninstall pillow-simd` then `pip install pillow`.")
-            print("############################################################")
-            print("Removing Pillow...")
-            try:
-                pip.main(["uninstall", "pillow", "-y", "-q"])
-            except SystemExit:
-                pass
-        if "pil" in pkgs:
-            print("############################################################")
-            print("PIL will be replaced by pillow-simd, which takes advantage of certain CPU features.")
-            print("To revert this change, simply run `pip uninstall pillow-simd` then `pip install PIL`.")
-            print("(Though you really should be using Pillow instead: http://python-pillow.org/)")
-            print("############################################################")
-            print("Removing PIL...")
-            try:
-                pip.main(["uninstall", "pil", "-y", "-q"])
-            except SystemExit:
-                pass
                 
     if "numpy" not in pkgs:
-        print("Installing NumPy...")
+        #print("Installing NumPy...")
         os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION" # pyFFTW uses a deprecated API apparently
         try:
-            pip.main(["install", "numpy", "-q"])
+            #pip.main(["install", "numpy", "-q"])
+            pass
         except SystemExit:
             pass
             
     if "pyfftw" not in pkgs:
         print("Installing PyFFTW...")
         try:
-            pip.main(["install", "pyfftw", "-q"])
+            #pip.main(["install", "pyfftw", "-q"])
+            pass
         except SystemExit:
             pass
 
