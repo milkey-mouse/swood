@@ -4,12 +4,14 @@ import sys
 if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_info.minor < 4):
     print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
     sys.exit(1)
-    
-import platform
+
+import importlib.util
 import importlib
+import platform
 import warnings
 import ctypes
 import os
+import io
 
 warnings.filterwarnings("ignore")
 
@@ -22,14 +24,16 @@ except ImportError:
     conn.request("GET", "/get-pip.py")
     res = conn.getresponse()
     pfile = res.read()
-    booststrap = compile(pfile.decode("utf-8"), "get-pip.py", "exec")
-    ns = {}
+    bootstrap = compile(pfile.decode("utf-8"), "get-pip.py", "exec")
+    temp_args = sys.argv
+    sys.argv = sys.argv[:1]
     try:
-        exec(bootstrap, ns)
+        exec(bootstrap)
     except SystemExit:
         pass
-    del ns
-    import pip
+    sys.argv = temp_args
+    importlib.invalidate_caches()
+    importlib.import_module("pip")
 
 from setuptools import setup
 
@@ -132,6 +136,7 @@ def get_flags():
     return (sse4, avx2)
 
 simd = False
+
 if len(sys.argv) > 1 and sys.argv[1] == "install":
     pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
     if "pillow-simd" in pkgs:
@@ -139,7 +144,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
         simd = True
     elif platform.machine() not in ("i386", "x86_64"):
         simd = False
-    elif os.name() != "posix":
+    elif os.name() != ("posix", "nt"):
         simd = False
     else:
         sse4, avx2 = get_flags()
@@ -150,27 +155,37 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
         elif sse4:
             print("Your processor supports SSE4. swood will install with SIMD support.")
             simd = True
-                
-    if "numpy" not in pkgs:
-        #print("Installing NumPy...")
-        os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION" # pyFFTW uses a deprecated API apparently
-        try:
-            #pip.main(["install", "numpy", "-q"])
-            pass
-        except SystemExit:
-            pass
             
-    if "pyfftw" not in pkgs:
-        print("Installing PyFFTW...")
-        try:
-            #pip.main(["install", "pyfftw", "-q"])
-            pass
-        except SystemExit:
-            pass
+    # we need to install numpy first because pyfftw needs it and pip has bad dependency resolution
+    # and we need to set this flag because pyFFTW uses a deprecated API apparently
+    os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"   
+    
+    for pkg in ("numpy", "pyfftw"):
+        if importlib.util.find_spec(pkg) is None:
+            print("Installing {}...".format(pkg))
+            tmp_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                pip.main(["install", pkg])
+            except SystemExit as e:
+                stdout_str = sys.stdout.getvalue()
+                sys.stdout = tmp_stdout
+                if e.code != 0:
+                    print("pip failed to install {}. stdout:".format(pkg))
+                    print(stdout_str)
+                else:
+                    importlib.invalidate_caches()
+
+    reqs = ['mido', 'numpy', 'progressbar2', 'pyfftw']
+    
+    if not simd:
+        reqs.append('pillow')
+        
+    print(__file__)
 
 setup(
     name='swood',
-    version='0.9.8',
+    version='0.9.9',
     description='With just one sample and a MIDI you too can make YTPMVs',
     long_description='Are you tired of manually pitch-adjusting every sound for your shitposts? Toil no more with auto-placement of sound samples according to a MIDI!',
     url='https://github.com/milkey-mouse/swood.exe',
@@ -187,7 +202,7 @@ setup(
     keywords='swood memes youtubepoop ytp ytpmvs',
     packages=["swood"],
 
-    install_requires=['mido', 'numpy', 'progressbar2', 'pyfftw', 'pillow-simd' if simd else 'pillow'],
+    install_requires=reqs,
 
     entry_points={
         'console_scripts': [
@@ -195,3 +210,4 @@ setup(
         ],
     },
 )
+   
