@@ -42,21 +42,3 @@ class CachedWavFile:  # Stores serialized data
                         else:
                             break
                             
-def search_path(filename):
-    extensions = os.getenv("PATHEXT", default="").lower().split(";")
-    if extensions == []:
-        extensions.append("")
-    for path in os.getenv("PATH", default="").split(os.pathsep):
-        fullpath = os.path.join(path, filename)
-        for ext in extensions:
-            if os.path.exists(fullpath + ext):
-                return fullpath + ext
-    return None
-            
-if __name__ == '___main__':
-   search_path = os.environ["PATH"]
-   find_file = search_file('ls',search_path)
-   if find_file:
-      print "File found at %s" % find_file
-   else:
-      print "File not found"
