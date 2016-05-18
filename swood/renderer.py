@@ -4,10 +4,12 @@ import math
 from PIL import Image
 import progressbar
 import numpy as np
+from numpy import zeros, asarray, argmin, resize
 
-import swood.midiparse
-import swood.wavout
+from . import midiparse
+from . import wavout
 
+CachedNote = midiparse.CachedNote
 
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
@@ -28,22 +30,26 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return np.asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
+        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.maxfreq / note.pitch)
         if self.fullclip or len(scaled) < note.length + self.threshold:
             return scaled
+        channels = self.sample.channels.shape[0]
+        if channels == 1:
+            cutoff = argmin(v + (d*20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
+            return np.resize(scaled, (1, note.length + cutoff))
         else:
-            cutoffs = []
-            for chan in range(self.sample.channels.shape[0]):
+            cutoffs = [None] * channels
+            for chan in range(channels):
                 # find the nearest/closest zero crossing within the threshold and continue until that
                 sample_end = np.empty(self.threshold)
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
                     sample_end[distance] = (val) + (distance * 20)
-                cutoffs.append(np.argmin(sample_end))
-            merged_channels = np.zeros((self.sample.channels, note.length + max(cutoffs)), dtype=np.int32)
-            for chan in range(self.sample.channels.shape[0]):
+                cutoffs[chan] = argmin(sample_end)
+            merged_channels = zeros((channels, note.length + max(cutoffs)), dtype=np.int32)
+            for chan in range(channels):
                 cutoff = note.length + cutoffs[chan]
                 merged_channels[chan][:cutoff] = scaled[chan][:cutoff]
             return merged_channels
@@ -77,7 +83,7 @@ class NoteRenderer:
                     rendered_note = self.notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
-                    rendered_note = midiparse.CachedNote(time, self.render_note(note))
+                    rendered_note = CachedNote(time, self.render_note(note))
                     self.notecache[hash(note)] = rendered_note
                 note_volume = (note.volume / midi.maxvolume) * self.sample.volume
                 output.add_data(time, (rendered_note.data * note_volume).astype(np.int32))

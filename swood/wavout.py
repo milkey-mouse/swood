@@ -1,5 +1,5 @@
 import numpy as np
-import swood.complain
+from . import complain
 import wave
 
 

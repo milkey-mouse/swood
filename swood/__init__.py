@@ -1,4 +1,4 @@
-import swood.complain
+from . import complain
 import sys
 
 
@@ -30,9 +30,9 @@ def run_cmd():
                 print("  --live             listen on a midi input and generate the output in realtime")
             return
 
-        import midiparse
-        import renderer
-        import sample
+        from . import midiparse
+        from . import renderer
+        from . import sample
         
 
         transpose = 0

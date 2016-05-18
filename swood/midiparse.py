@@ -3,7 +3,7 @@ import operator
 
 import mido
 
-import swood.complain
+from . import complain
 
 
 class Note:
