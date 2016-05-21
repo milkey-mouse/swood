@@ -173,10 +173,10 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
                 else:
                     importlib.invalidate_caches()
 
-    reqs = ['mido', 'numpy', 'progressbar2', 'pyfftw']
-    
-    if not simd:
-        reqs.append('pillow')
+reqs = ['mido', 'numpy', 'progressbar2', 'pyfftw']
+
+if not simd:
+    reqs.append('pillow')
 
 setup(
     name='swood',
