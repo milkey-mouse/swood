@@ -157,7 +157,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
     # and we need to set this flag because pyFFTW uses a deprecated API apparently
     os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"   
     
-    for pkg in ("numpy", "pyfftw"):
+    for pkg in ("numpy", "pyfftw", "progressbar2"):
         if importlib.util.find_spec(pkg) is None:
             print("Installing {}...".format(pkg))
             tmp_stdout = sys.stdout
