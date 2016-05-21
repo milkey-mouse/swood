@@ -19,22 +19,19 @@ try:
     import pip
 except ImportError:
     print("Installing pip...")
-    import http.client
-    conn = http.client.HTTPSConnection("bootstrap.pypa.io")
-    conn.request("GET", "/get-pip.py")
-    res = conn.getresponse()
-    pfile = res.read()
-    bootstrap = compile(pfile.decode("utf-8"), "get-pip.py", "exec")
-    temp_args = sys.argv
-    sys.argv = sys.argv[:1]
-    try:
-        exec(bootstrap)
-    except SystemExit:
-        pass
-    sys.argv = temp_args
+    importlib.import_module("ensurepip")
+    ensurepip.bootstrap()
     importlib.invalidate_caches()
     importlib.import_module("pip")
-
+    print("Updating pip...")
+    try:
+        pip.main(["install", "pip", "--upgrade", "--no-cache-dir", "--quiet"])
+    except SystemExit as e:
+        if e.code == 0:
+            importlib.reload("pip")
+        else:
+          print("Error upgrading pip.")
+    
 from setuptools import setup
 
 def get_flags():
@@ -180,8 +177,6 @@ if len(sys.argv) > 1 and sys.argv[1] == "install":
     
     if not simd:
         reqs.append('pillow')
-        
-    print(__file__)
 
 setup(
     name='swood',
