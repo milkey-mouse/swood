@@ -7,14 +7,17 @@ def run_cmd():
         if len(sys.argv) <= 3:
             import pkg_resources
             import importlib.util
+            version = "(v. ?)"
             try:
                 version = "(v. {})".format(pkg_resources.get_distribution("swood").version)
             except pkg_resources.DistributionNotFound:
-                version = "?"
+                pass
             try:
                 if "-v" in sys.argv:
                     import PIL
                     version += " (PIL v. {})".format(PIL.PILLOW_VERSION)
+            except (ImportError, AttributeError):
+                version += " (PIL v. ?)"
             print("swood - the automatic ytpmv generator " + version)
             print("")
             print("usage: swood in_wav in_midi out_wav")
