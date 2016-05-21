@@ -6,12 +6,16 @@ def run_cmd():
     with complain.ComplaintFormatter():
         if len(sys.argv) <= 3:
             import pkg_resources
-            import importlib
+            import importlib.util
             try:
-                version = pkg_resources.get_distribution("swood").version
+                version = "(v. {})".format(pkg_resources.get_distribution("swood").version)
             except pkg_resources.DistributionNotFound:
                 version = "?"
-            print("swood - the automatic ytpmv generator (v. {})".format(version))
+            try:
+                if "-v" in sys.argv:
+                    import PIL
+                    version += " (PIL v. {})".format(PIL.PILLOW_VERSION)
+            print("swood - the automatic ytpmv generator " + version)
             print("")
             print("usage: swood in_wav in_midi out_wav")
             print("  in_wav: a short wav file to use as the instrument for the midi")
@@ -26,7 +30,7 @@ def run_cmd():
             print("  --cachesize=7.5    note cache size (seconds); lower could speed up repetitive songs, using more memory")
             print("  --fullclip         no matter how short the note, always use the full sample without cropping")
             print("  --optout           opt out of automatic bug reporting (or you can set the env variable SWOOD_OPTOUT)")
-            if importlib.util.find_spec("swoodlive"):
+            if importlib.util.find_spec("swoodlive") is not None:
                 print("  --live             listen on a midi input and generate the output in realtime")
             return
 
