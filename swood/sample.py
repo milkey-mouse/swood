@@ -13,7 +13,7 @@ class CalculatedFFT:
 
 
 class Sample:
-    def __init__(self, filename, binsize, volume=0.9, delete_raw_data=True):
+    def __init__(self, filename, binsize, volume=0.8, delete_raw_data=True):
         self.binsize = binsize
         
         if binsize < 2:
