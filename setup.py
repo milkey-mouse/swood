@@ -183,7 +183,7 @@ setup(
     version='0.9.9',
     description='With just one sample and a MIDI you too can make YTPMVs',
     long_description='Are you tired of manually pitch-adjusting every sound for your shitposts? Toil no more with auto-placement of sound samples according to a MIDI!',
-    url='https://github.com/milkey-mouse/swood.exe',
+    url='https://meme.institute/swood',
     author='Milkey Mouse',
     author_email='milkeymouse@meme.institute',
     license='MIT',
