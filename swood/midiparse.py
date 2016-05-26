@@ -45,7 +45,7 @@ class MIDIParser:
         volume = 0
 
         try:
-            with mido.MidiFile(filename, "r") as mid:
+            with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
                 time = 0
                 for message in mid:
                     time += message.time

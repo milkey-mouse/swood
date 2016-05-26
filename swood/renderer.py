@@ -18,7 +18,7 @@ class FileSaveType(Enum):
 
 
 class NoteRenderer:
-    def __init__(self, sample, fullclip=False, threshold=0.075, cachesize=7.5):
+    def __init__(self, sample, fullclip=False, cachesize=7.5, threshold=0.075):
         if threshold < 0:
             return ValueError("The threshold must be a positive number.")
         self.sample = sample

@@ -23,7 +23,7 @@ class UncachedWavFile:
         # we can't use a with statement with wave.open here
         # because wave.open throws a really weird error I can't catch
         try:
-            with open(self.filename, "wb") as wavfile:
+            with (open(self.filename, "wb") if isinstance(self.filename, str) else self.filename) as wavfile:
                 with wave.Wave_write(self) as wav:
                     wav.initfp(wavfile)
                     wav.setparams((self.channels.shape[0], #channels
