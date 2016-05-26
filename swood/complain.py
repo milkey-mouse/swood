@@ -14,7 +14,7 @@ class ComplaintFormatter(object):
     def __exit__(self, exc_type, exc, tb):
         if exc_type == ComplainToUser:
             print("Error: {}".format(exc))
-        elif exc_type is not None:
+        elif isinstance(exc, Exception):
             tb = traceback.format_exc()
             if "--optout" in sys.argv or os.environ.get("SWOOD_OPTOUT") is not None:
                 print("Something went wrong. A bug report will not be sent because of your environment variable/CLI option.")
