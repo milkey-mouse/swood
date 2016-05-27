@@ -8,29 +8,34 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
 import importlib.util
 import importlib
 import platform
-import warnings
-import ctypes
+
 import os
 import io
-
-warnings.filterwarnings("ignore")
 
 try:
     import pip
 except ImportError:
     print("Installing pip...")
-    importlib.import_module("ensurepip")
+    import ensurepip
     ensurepip.bootstrap()
     importlib.invalidate_caches()
-    importlib.import_module("pip")
-    print("Updating pip...")
+    import pip
+          
+def install_package(pkg):
+    print("Installing {}...".format(pkg))
+    tmp_stdout = sys.stdout
+    sys.stdout = io.StringIO()
     try:
-        pip.main(["install", "pip", "--upgrade", "--no-cache-dir", "--quiet"])
+        pip.main(["install", pkg])
     except SystemExit as e:
-        if e.code == 0:
-            importlib.reload("pip")
+        stdout_str = sys.stdout.getvalue()
+        sys.stdout = tmp_stdout
+        if e.code != 0:
+            print("pip failed to install {}. stdout:".format(pkg))
+            print(stdout_str)
+            raise ImportError
         else:
-          print("Error upgrading pip.")
+            importlib.invalidate_caches()
     
 from setuptools import setup
 
@@ -41,41 +46,27 @@ def get_flags():
         # something feels very wrong about running assembly in python
         # most of this taken from https://github.com/workhorsy/py-cpuinfo
         
-        sixtyfour = sys.maxsize > 2**32 #the docs say platform.machine() can be unreliable
+        sixtyfour = sys.maxsize > 2**32  # the docs say platform.machine() can be unreliable
                 
         def asm_func(restype=None, argtypes=(), byte_code=[]):
                 byte_code = bytes.join(b'', byte_code)
                 address = None
-
-                if platform.system().lower() == 'windows':
-                    # Allocate a memory segment the size of the byte code, and make it executable
-                    size = len(byte_code)
-                    MEM_COMMIT = ctypes.c_ulong(0x1000)
-                    PAGE_EXECUTE_READWRITE = ctypes.c_ulong(0x40)
-                    address = ctypes.windll.kernel32.VirtualAlloc(ctypes.c_int(0), ctypes.c_size_t(size), MEM_COMMIT, PAGE_EXECUTE_READWRITE)
-                    if not address:
-                        raise Exception("Failed to VirtualAlloc")
-                    # Copy the byte code into the memory segment
-                    memmove = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t)(ctypes._memmove_addr)
-                    if memmove(address, byte_code, size) < 0:
-                        raise Exception("Failed to memmove")
-                else:
-                    # Allocate a memory segment the size of the byte code
-                    size = len(byte_code)
-                    address = ctypes.pythonapi.valloc(size)
-                    if not address:
-                        raise Exception("Failed to valloc")
-                    # Mark the memory segment as writeable only
-                    WRITE = 0x2
-                    if ctypes.pythonapi.mprotect(address, size, WRITE) < 0:
-                        raise Exception("Failed to mprotect")
-                    # Copy the byte code into the memory segment
-                    if ctypes.pythonapi.memmove(address, byte_code, size) < 0:
-                        raise Exception("Failed to memmove")
-                    # Mark the memory segment as writeable and executable only
-                    WRITE_EXECUTE = 0x2 | 0x4
-                    if ctypes.pythonapi.mprotect(address, size, WRITE_EXECUTE) < 0:
-                        raise Exception("Failed to mprotect")
+                # Allocate a memory segment the size of the byte code
+                size = len(byte_code)
+                address = ctypes.pythonapi.valloc(size)
+                if not address:
+                    raise Exception("Failed to valloc")
+                # Mark the memory segment as writeable only
+                WRITE = 0x2
+                if ctypes.pythonapi.mprotect(address, size, WRITE) < 0:
+                    raise Exception("Failed to mprotect")
+                # Copy the byte code into the memory segment
+                if ctypes.pythonapi.memmove(address, byte_code, size) < 0:
+                    raise Exception("Failed to memmove")
+                # Mark the memory segment as writeable and executable only
+                WRITE_EXECUTE = 0x2 | 0x4
+                if ctypes.pythonapi.mprotect(address, size, WRITE_EXECUTE) < 0:
+                    raise Exception("Failed to mprotect")
                 # Cast the memory segment into a function
                 functype = ctypes.CFUNCTYPE(restype, *argtypes)
                 fun = functype(address)
@@ -88,15 +79,11 @@ def get_flags():
             retval = func()
             size = ctypes.c_size_t(len(byte_code))
             # Free the function memory segment
-            if platform.system().lower() == 'windows':
-                MEM_RELEASE = ctypes.c_ulong(0x8000)
-                ctypes.windll.kernel32.VirtualFree(address, size, MEM_RELEASE)
-            else:
-                # Remove the executable tag on the memory
-                READ_WRITE = 0x1 | 0x2
-                if ctypes.pythonapi.mprotect(address, size, READ_WRITE) < 0:
-                    raise Exception("Failed to mprotect")
-                ctypes.pythonapi.free(address)
+            # Remove the executable tag on the memory
+            READ_WRITE = 0x1 | 0x2
+            if ctypes.pythonapi.mprotect(address, size, READ_WRITE) < 0:
+                raise Exception("Failed to mprotect")
+            ctypes.pythonapi.free(address)
             return retval
 
         def is_bit_set(reg, bit):
@@ -108,70 +95,66 @@ def get_flags():
                 return b"\x66\xB8\x01\x00" # mov eax,0x1"
             else:
                 return (b"\x31\xC0"         # xor ax,ax
-                        b"\x40"             # inc ax
-                )
+                        b"\x40")            # inc ax
             
-        ecx = run_asm(
-            eax(),
-            b"\x0f\xa2"         # cpuid
-            b"\x89\xC8"         # mov ax,cx
-            b"\xC3"             # ret
-        )
-            
-        sse4 = is_bit_set(ecx, 19) or is_bit_set(ecx, 20)
-        
+        ecx = run_asm(eax(),
+                      b"\x0f\xa2"         # cpuid
+                      b"\x89\xC8"         # mov ax,cx
+                      b"\xC3")            # ret
+                      
         ebx = run_asm(
                 b"\xB8\x01\x00\x00\x80" # mov ax,0x80000001
                 b"\x0f\xa2"         # cpuid
                 b"\x89\xD8"         # mov ax,bx
-                b"\xC3"             # ret
-            )
+                b"\xC3")            # ret
             
-        avx2 = is_bit_set(ebx, 5)
+        sse4 = is_bit_set(ecx, 19) or is_bit_set(ecx, 20)
+            
+        avx2 = is_bit_set(ebx, 5)  # because a midi synthesizer definitely needs to support server-grade hardware
     except Exception:
         pass
     return (sse4, avx2)
 
-simd = False
-
-if len(sys.argv) > 1 and sys.argv[1] == "install":
+if len(sys.argv) > 1 and "install" in sys.argv:
     pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
+    
+    install = False
+    simd = False
+    
     if "pillow-simd" in pkgs:
         print("pillow-simd is already installed. swood will install with SIMD support.")
+        install = False
         simd = True
-    elif platform.machine() not in ("i386", "x86_64"):
-        simd = False
-    elif os.name() != ("posix", "nt"):
-        simd = False
-    else:
-        sse4, avx2 = get_flags()
-        if avx2:
-            print("Your processor supports AVX2. swood will install with SIMD support.")
-            os.environ["CFLAGS"] = "-mavx2"
-            simd = True
-        elif sse4:
-            print("Your processor supports SSE4. swood will install with SIMD support.")
-            simd = True
-            
+    if platform.machine() in ("i386", "x86_64") and os.name() == "posix":
+        try:
+            import ctypes
+            sse4, avx2 = get_flags()
+            if avx2:
+                print("Your processor supports AVX2. swood will install with SIMD support.")
+                os.environ["CFLAGS"] = "-mavx2"
+                install = True
+                simd = True
+            elif sse4:
+                print("Your processor supports SSE4. swood will install with SIMD support.")
+                install = True
+                simd = True
+        except:
+            simd = False
+    
     # we need to install numpy first because pyfftw needs it and pip has bad dependency resolution
     # and we need to set this flag because pyFFTW uses a deprecated API apparently
-    os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"   
+    os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"  
     
     for pkg in ("numpy", "pyfftw", "progressbar2"):
-        if importlib.util.find_spec(pkg) is None:
-            print("Installing {}...".format(pkg))
-            tmp_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-            try:
-                pip.main(["install", pkg])
-            except SystemExit as e:
-                stdout_str = sys.stdout.getvalue()
-                sys.stdout = tmp_stdout
-                if e.code != 0:
-                    print("pip failed to install {}. stdout:".format(pkg))
-                    print(stdout_str)
-                else:
-                    importlib.invalidate_caches()
+        if pkg not in pkgs:
+            install_package(pkg)
+    
+    if install:
+        try:
+            install_package("pillow-simd")
+        except ImportError:
+            print("SIMD support failed to install. swood will run slower.")
+            simd = False
 
 reqs = ['mido', 'numpy', 'progressbar2', 'pyfftw']
 
