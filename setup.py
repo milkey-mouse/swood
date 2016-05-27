@@ -5,6 +5,7 @@ if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_in
     print("Sorry, swood.exe requires at least Python 3.4 to run correctly.")
     sys.exit(1)
 
+from setuptools import setup
 import importlib.util
 import importlib
 import platform
@@ -32,13 +33,11 @@ def install_package(pkg):
         stdout_str = sys.stdout.getvalue()
         sys.stdout = tmp_stdout
         if e.code != 0:
-            print("pip failed to install {}. stdout:".format(pkg))
+            print("pip failed to install {}.\nYou may need a working C compiler to continue.\npip stdout:".format(pkg))
             print(stdout_str)
             raise ImportError
         else:
             importlib.invalidate_caches()
-
-from setuptools import setup
 
 
 def get_flags():
