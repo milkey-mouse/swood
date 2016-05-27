@@ -116,11 +116,11 @@ def get_flags():
         pass
     return (sse4, avx2)
 
+install = False
+simd = False
+
 if len(sys.argv) > 1 and "install" in sys.argv:
     pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
-
-    install = False
-    simd = False
 
     if "pillow-simd" in pkgs:
         print("pillow-simd is already installed. swood will install with SIMD support.")
