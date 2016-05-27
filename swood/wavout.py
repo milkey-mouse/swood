@@ -26,11 +26,11 @@ class UncachedWavFile:
             with (open(self.filename, "wb") if isinstance(self.filename, str) else self.filename) as wavfile:
                 with wave.Wave_write(self) as wav:
                     wav.initfp(wavfile)
-                    wav.setparams((self.channels.shape[0], #channels
-                                   self.channels.dtype.itemsize, #sample width
-                                   self.framerate, #sample rate
-                                   self.channels.shape[1], #number of frames
-                                   "NONE", "not compressed")) #compression type
+                    wav.setparams((self.channels.shape[0],  # channels
+                                   self.channels.dtype.itemsize,  # sample width
+                                   self.framerate,  # sample rate
+                                   self.channels.shape[1],  # number of frames
+                                   "NONE", "not compressed"))  # compression type
                     wav.writeframesraw(self.channels.reshape(self.channels.size, order="F"))
         except IOError:
             raise complain.ComplainToUser("Can't save output file '{}'.".format(self.filename))

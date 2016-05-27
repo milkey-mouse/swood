@@ -6,6 +6,7 @@ import wave
 
 pyfftw.interfaces.cache.enable()
 
+
 class CalculatedFFT:
     def __init__(self, avgdata, spacing):
         self.avgdata = avgdata
@@ -15,7 +16,7 @@ class CalculatedFFT:
 class Sample:
     def __init__(self, filename, binsize, volume=0.8, delete_raw_data=True):
         self.binsize = binsize
-        
+
         if binsize < 2:
             raise complain.ComplainToUser("FFT bin size must be at least 2.")
 

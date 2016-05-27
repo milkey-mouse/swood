@@ -11,6 +11,7 @@ from . import wavout
 
 CachedNote = midiparse.CachedNote
 
+
 class FileSaveType(Enum):
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1
@@ -38,7 +39,7 @@ class NoteRenderer:
             return scaled
         channels = self.sample.channels.shape[0]
         if channels == 1:
-            cutoff = argmin(v + (d*20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
+            cutoff = argmin(v + (d * 20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
             return np.resize(scaled, (1, note.length + cutoff))
         else:
             cutoffs = [None] * channels
