@@ -126,7 +126,7 @@ if len(sys.argv) > 1 and "install" in sys.argv:
         print("pillow-simd is already installed. swood will install with SIMD support.")
         install = False
         simd = True
-    if platform.machine() in ("i386", "x86_64") and os.name() == "posix":
+    if platform.machine() in ("i386", "x86_64") and os.name() in ("posix", "nt"):
         try:
             import ctypes
             sse4, avx2 = get_flags()
