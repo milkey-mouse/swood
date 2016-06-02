@@ -73,25 +73,32 @@ class NoteRenderer:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
             progress = 0
 
+        # https://stackoverflow.com/questions/37202463
         caching = self.cachesize > 0
-
+        add_data = output.add_data
+        maxvolume = midi.maxvolume
+        self.cachesize = cachesize
+        int32 = int32
+        
         if caching:
             tick = 8
+            update = bar.update
+            notecache = self.notecache
 
         for time, notes in midi.notes:
             for note in notes:
-                if hash(note) in self.notecache:
-                    rendered_note = self.notecache[hash(note)]
+                if hash(note) in notecache:
+                    rendered_note = notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
                     rendered_note = CachedNote(time, self.render_note(note))
-                    self.notecache[hash(note)] = rendered_note
-                output.add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)).astype(np.int32))
+                    notecache[hash(note)] = rendered_note
+                add_data(time, (rendered_note.data * (note.volume / maxvolume)).astype(int32))
 
                 if pbar:
                     # increment progress bar
                     progress += 1
-                    bar.update(progress)
+                    update(progress)
 
             
             if caching:
@@ -100,12 +107,12 @@ class NoteRenderer:
                 tick += 1
                 if tick == 15:
                     tick = 0
-                    for k in list(self.notecache.keys()):
-                        if time - self.notecache[k].length > self.cachesize and self.notecache[k].used < 3:
-                            del self.notecache[k]
+                    for k in list(notecache.keys()):
+                        if time - notecache[k].length > cachesize and notecache[k].used < 3:
+                            del notecache[k]
 
-        if clear_cache:
-            self.notecache.clear()
+        if caching and clear_cache:
+            notecache.clear()
 
         if savetype == FileSaveType.ARRAY_IN_MEM:
             return output.channels
