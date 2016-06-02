@@ -26,7 +26,7 @@ class Sample:
 
         self.wav = self.parse_wav(filename)
 
-        max_amplitude = max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav)
+        max_amplitude = float(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
         self.img = Image.frombytes("I",
                                    (self.length, self.channels),
