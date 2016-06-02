@@ -43,6 +43,9 @@ class MIDIParser:
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
+        
+        if speed != 1:
+            note_endings = collections.defaultdict(list)
 
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
@@ -56,8 +59,10 @@ class MIDIParser:
                         note.starttime = int(round(time * wav.framerate / speed))
                         note.volume = 127 if message.velocity == 0 else message.velocity
                         note.pitch = self.note_to_freq(message.note + transpose)
-
                         notes[message.note].append(note)
+                        
+                        if speed != 1:
+                            note_endings[]
                         volume += note.volume
                         self.maxvolume = max(volume, self.maxvolume)
                     elif message.type == "note_off":
