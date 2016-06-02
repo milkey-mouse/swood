@@ -26,6 +26,8 @@ class Sample:
         self._img = None
 
         self.wav = self.parse_wav(filename)
+        
+        self.volume = 256 ** 4 / (256 ** self.sampwidth) * volume
 
     def parse_wav(self, filename):
         try:
