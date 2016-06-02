@@ -27,7 +27,7 @@ class Sample:
 
         self.wav = self.parse_wav(filename)
         
-        self.volume = 256 ** 4 / (256 ** self.sampwidth) * volume
+        self.volume = 256 ** (4 - self.sampwidth) * volume
 
     def parse_wav(self, filename):
         try:
