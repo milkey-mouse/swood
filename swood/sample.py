@@ -26,7 +26,7 @@ class Sample:
         self._img = None
 
         self.wav = self.parse_wav(filename)
-        
+
         max_amplitude = float(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
 
@@ -85,7 +85,7 @@ class Sample:
                     del self.wav
                 self._fft = CalculatedFFT(avgdata, spacing)
         return self._fft
-        
+
     @property
     def img(self):
         if not self._img:

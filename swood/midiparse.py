@@ -43,7 +43,7 @@ class MIDIParser:
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
-        
+
         if speed != 1:
             unended_notes = set()  # filled with (endtime, note.volume)
 
@@ -60,7 +60,7 @@ class MIDIParser:
                         note.volume = 127 if message.velocity == 0 else message.velocity
                         note.pitch = self.note_to_freq(message.note + transpose)
                         notes[message.note].append(note)
-                        
+
                         if speed != 1:
                             removed = set()
                             for unended_note in unended_notes:
@@ -79,7 +79,6 @@ class MIDIParser:
                             results[note.starttime].append(note)
                         except IndexError:
                             print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
-
                         
                         endtime = int(time * wav.framerate / speed)
                         if speed == 1:
@@ -87,10 +86,10 @@ class MIDIParser:
                         else:
                             unended_notes.add((endtime, note.volume))
                         note.length = endtime - note.starttime
-                        
+
                         self.notecount += 1
                         self.maxpitch = max(self.maxpitch, note.pitch)
-                        
+
 
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
