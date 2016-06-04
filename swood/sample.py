@@ -14,13 +14,12 @@ class CalculatedFFT:
 
 
 class Sample:
-    def __init__(self, filename, binsize, volume=0.8, delete_raw_data=True):
+    def __init__(self, filename, binsize, volume=0.8):
         self.binsize = binsize
 
         if binsize < 2:
             raise complain.ComplainToUser("FFT bin size must be at least 2.")
 
-        self.delete_raw = delete_raw_data  # delete raw data after FFT analysis
         self._maxfreq = None
         self._fft = None
         self._img = None
@@ -29,6 +28,7 @@ class Sample:
 
         max_amplitude = float(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
+        print(self.volume 256 ** 4)
 
     def parse_wav(self, filename):
         try:
@@ -81,8 +81,6 @@ class Sample:
                 self.binsize = self.binsize // 2
                 self._fft = self.fft
             else:
-                if self.delete_raw:
-                    del self.wav
                 self._fft = CalculatedFFT(avgdata, spacing)
         return self._fft
 
