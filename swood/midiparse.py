@@ -45,7 +45,7 @@ class MIDIParser:
         volume = 0
         
         if speed != 1:
-            note_endings = collections.defaultdict(list)
+            unended_notes = set()  # filled with (endtime, note.volume)
 
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
@@ -62,7 +62,12 @@ class MIDIParser:
                         notes[message.note].append(note)
                         
                         if speed != 1:
-                            note_endings[]
+                            removed = set()
+                            for unended_note in unended_notes:
+                                if unended_note[0] < time:
+                                    volume -= unended_note[1]
+                                    removed.add(unended_note)
+                            unended_notes -= removed
                         volume += note.volume
                         self.maxvolume = max(volume, self.maxvolume)
                     elif message.type == "note_off":
@@ -75,10 +80,17 @@ class MIDIParser:
                         except IndexError:
                             print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
 
+                        
+                        endtime = int(time * wav.framerate / speed)
+                        if speed == 1:
+                            volume -= note.volume
+                        else:
+                            unended_notes.add((endtime, note.volume))
+                        note.length = endtime - note.starttime
+                        
                         self.notecount += 1
-                        volume -= note.volume
                         self.maxpitch = max(self.maxpitch, note.pitch)
-                        note.length = int(time * wav.framerate / speed) - note.starttime
+                        
 
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
