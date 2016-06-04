@@ -44,30 +44,20 @@ class MIDIParser:
         self.maxpitch = 0
         volume = 0
 
-        if speed != 1:
-            unended_notes = set()  # filled with (endtime, note.volume)
-
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
                 time = 0
                 for message in mid:
-                    time += message.time
+                    time += message.time / speed
                     if "channel" in vars(message) and message.channel == 10:
                         continue  # channel 10 is reserved for percussion
                     if message.type == "note_on":
                         note = Note()
-                        note.starttime = int(round(time * wav.framerate / speed))
+                        note.starttime = int(round(time * wav.framerate))
                         note.volume = 127 if message.velocity == 0 else message.velocity
                         note.pitch = self.note_to_freq(message.note + transpose)
                         notes[message.note].append(note)
-
-                        if speed != 1:
-                            removed = set()
-                            for unended_note in unended_notes:
-                                if unended_note[0] < time:
-                                    volume -= unended_note[1]
-                                    removed.add(unended_note)
-                            unended_notes -= removed
+                        
                         volume += note.volume
                         self.maxvolume = max(volume, self.maxvolume)
                     elif message.type == "note_off":
@@ -79,27 +69,18 @@ class MIDIParser:
                             results[note.starttime].append(note)
                         except IndexError:
                             print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
-                        
-                        endtime = int(time * wav.framerate / speed)
-                        if speed == 1:
-                            volume -= note.volume
-                        else:
-                            unended_notes.add((endtime, note.volume))
-                        note.length = endtime - note.starttime
 
                         self.notecount += 1
+                        volume -= note.volume
                         self.maxpitch = max(self.maxpitch, note.pitch)
-
-
+                        note.length = int(time * wav.framerate) - note.starttime
+                
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for ntime, nlist in notes.items():
                         for note in nlist:
-                            note.length = int(time * wav.framerate / speed) - note.starttime
+                            note.length = int(time * wav.framerate) - note.starttime
                             self.notecount += 1
-
-                if self.notecount == 0:
-                    raise complain.ComplainToUser("This MIDI file doesn't have any notes in it!")
 
                 self.notes = sorted(results.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
