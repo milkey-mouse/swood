@@ -93,7 +93,8 @@ class NoteRenderer:
                 else:
                     rendered_note = CachedNote(time, self.render_note(note))
                     notecache[hash(note)] = rendered_note
-                add_data(time, (rendered_note.data * (note.volume / maxvolume)).astype(int32))
+                note_volume = (note.volume / midi.maxvolume) * self.sample.volume
+                add_data(time, (rendered_note.data * note_volume).astype(int32))
 
                 if pbar:
                     # increment progress bar

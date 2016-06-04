@@ -27,7 +27,8 @@ class Sample:
 
         self.wav = self.parse_wav(filename)
         
-        self.volume = 256 ** (4 - self.sampwidth) * volume
+        max_amplitude = float(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
+        self.volume = 256 ** 4 / (max_amplitude * 2) * volume
 
     def parse_wav(self, filename):
         try:
@@ -90,7 +91,7 @@ class Sample:
         if not self._img:
             self._img = Image.frombytes("I",
                         (self.length, self.channels),
-                        (self.wav * self.volume).astype(np.int32).tobytes(),
+                        self.wav.astype(np.int32).tobytes(),
                         "raw", "I", 0, 1)
             # Pillow recommends those last args because of a bug in the raw parser
             # See http://pillow.readthedocs.io/en/3.2.x/reference/Image.html?highlight=%22raw%22#PIL.Image.frombuffer
