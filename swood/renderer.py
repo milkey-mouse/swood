@@ -73,12 +73,13 @@ class NoteRenderer:
             bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
             progress = 0
 
-        # https://stackoverflow.com/questions/37202463
+        # "inlining" these variables can speed up the lookup, making it faster 
+        # see https://stackoverflow.com/questions/37202463
         caching = self.cachesize > 0
         add_data = output.add_data
         maxvolume = midi.maxvolume
         self.cachesize = cachesize
-        int32 = int32
+        int32 = np.int32
         
         if caching:
             tick = 8
@@ -104,7 +105,8 @@ class NoteRenderer:
             
             if caching:
                 # cache "garbage collection":
-                # if a CachedNote is more than 7.5 (default) seconds old it removes it from the cache to save mem(e)ory
+                # if a CachedNote is more than <cachesize> seconds old and not
+                # used >2 times it removes it from the cache to save mem(e)ory
                 tick += 1
                 if tick == 15:
                     tick = 0
