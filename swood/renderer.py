@@ -78,7 +78,7 @@ class NoteRenderer:
         caching = self.cachesize > 0
         add_data = output.add_data
         maxvolume = midi.maxvolume
-        self.cachesize = cachesize
+        cachesize = self.cachesize
         int32 = np.int32
 
         if caching:
