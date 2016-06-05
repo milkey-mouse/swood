@@ -26,9 +26,8 @@ class Sample:
 
         self.wav = self.parse_wav(filename)
 
-        max_amplitude = float(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
+        max_amplitude = int(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
-        print(self.volume 256 ** 4)
 
     def parse_wav(self, filename):
         try:
