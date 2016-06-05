@@ -20,7 +20,7 @@ class Sample:
         if binsize < 2:
             raise complain.ComplainToUser("FFT bin size must be at least 2.")
 
-        self._maxfreq = None
+        self._fundamental_freq = None
         self._fft = None
         self._img = None
 
@@ -96,10 +96,10 @@ class Sample:
         return self._img
 
     @property
-    def maxfreq(self):
-        if not self._maxfreq:
-            self._maxfreq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
-        return self._maxfreq
+    def fundamental_freq(self):
+        if not self._fundamental_freq:
+            self._fundamental_freq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
+        return self._fundamental_freq
 
     def __len__(self):
         return self.length

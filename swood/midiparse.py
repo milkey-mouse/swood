@@ -57,7 +57,7 @@ class MIDIParser:
                         note.volume = 127 if message.velocity == 0 else message.velocity
                         note.pitch = self.note_to_freq(message.note + transpose)
                         notes[message.note].append(note)
-                        
+
                         volume += note.volume
                         self.maxvolume = max(volume, self.maxvolume)
                     elif message.type == "note_off":
@@ -74,7 +74,7 @@ class MIDIParser:
                         volume -= note.volume
                         self.maxpitch = max(self.maxpitch, note.pitch)
                         note.length = int(time * wav.framerate) - note.starttime
-                
+
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for ntime, nlist in notes.items():
