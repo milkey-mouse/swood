@@ -4,7 +4,7 @@ import math
 from PIL import Image
 import progressbar
 import numpy as np
-from numpy import zeros, asarray, argmin, resize
+from numpy import zeros, asarray, argmin, resize, int32
 
 from . import midiparse
 from . import wavout
@@ -31,7 +31,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
+        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels)), dtype=int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
@@ -49,7 +49,7 @@ class NoteRenderer:
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
                     sample_end[distance] = (val) + (distance * 20)
                 cutoffs[chan] = argmin(sample_end)
-            merged_channels = zeros((channels, note.length + max(cutoffs)), dtype=np.int32)
+            merged_channels = zeros((channels, note.length + max(cutoffs)), dtype=int32)
             for chan in range(channels):
                 cutoff = note.length + cutoffs[chan]
                 merged_channels[chan][:cutoff] = scaled[chan][:cutoff]
@@ -79,7 +79,6 @@ class NoteRenderer:
         add_data = output.add_data
         maxvolume = midi.maxvolume
         cachesize = self.cachesize
-        int32 = np.int32
 
         if caching:
             tick = 8
