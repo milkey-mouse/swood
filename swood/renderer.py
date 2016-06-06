@@ -31,7 +31,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
+        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
@@ -93,8 +93,7 @@ class NoteRenderer:
                 else:
                     rendered_note = CachedNote(time, self.render_note(note))
                     notecache[hash(note)] = rendered_note
-                note_volume = (note.volume / midi.maxvolume) * self.sample.volume
-                add_data(time, (rendered_note.data * note_volume).astype(int32))
+                add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)).astype(int32))
 
                 if pbar:
                     # increment progress bar

@@ -17,7 +17,7 @@ class UncachedWavFile:
         # cut it off at the end of the file in case of cache shenanigans
         length = min(self.channels.shape[1] - start, data.shape[1])
         for chan in range(self.channels.shape[0]):
-            self.channels[chan][start:start + length] += data[chan][:length]
+            self.channels[chan][start:start + length] += data[chan][:length].astype(self.channels.dtype)
 
     def save(self):
         # we can't use a with statement with wave.open here

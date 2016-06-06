@@ -1,6 +1,7 @@
+from numpy import int32
+from . import complain
 from PIL import Image
 import numpy as np
-from . import complain
 import pyfftw
 import wave
 
@@ -42,7 +43,7 @@ class Sample:
                 elif self.sampwidth == 2:
                     self.size = np.int16
                 elif self.sampwidth == 3 or self.sampwidth == 4:
-                    self.size = np.int32
+                    self.size = int32
                 else:
                     raise wave.Error
 
@@ -88,7 +89,7 @@ class Sample:
         if not self._img:
             self._img = Image.frombytes("I",
                         (self.length, self.channels),
-                        self.wav.astype(np.int32).tobytes(),
+                        (self.wav * self.volume).astype(int32).tobytes(),
                         "raw", "I", 0, 1)
             # Pillow recommends those last args because of a bug in the raw parser
             # See http://pillow.readthedocs.io/en/3.2.x/reference/Image.html?highlight=%22raw%22#PIL.Image.frombuffer
