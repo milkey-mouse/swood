@@ -31,7 +31,7 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
-        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels)), dtype=int32)
+        return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=np.int32)
 
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
