@@ -1,7 +1,6 @@
 import pkg_resources
 import argparse
 import mido
-import sys
 
 
 def version_info():
@@ -20,23 +19,26 @@ def swoodlive_installed():
 
 
 def run_cmd():
-    parser = argparse.ArgumentParser(prog=("swood.exe" if sys.platform.startswith("win") else "swood"), description="swood.exe: the automatic ytpmv generator")
+    parser = argparse.ArgumentParser(description="swood.exe: the automatic ytpmv generator", add_help=False)
+    #mex = parser.add_mutually_exclusive_group()
 
-    parser.add_argument("in_wav", type=argparse.FileType("rb"), help="a short wav file to sample as the instrument")
-    parser.add_argument("in_midi", type=mido.MidiFile, help="the MIDI to play with the wav sample")
-    parser.add_argument("out_wav", type=argparse.FileType("wb"), help="path for the output wav file")
+    cmd = parser#mex.add_argument_group("arguments", "Use these if you want to specify everything with arguments.")
+    cmd.add_argument("in_wav", type=argparse.FileType("rb"), help="a short wav file to sample as the instrument")
+    cmd.add_argument("in_midi", type=mido.MidiFile, help="the MIDI to play with the wav sample")
+    cmd.add_argument("out_wav", type=argparse.FileType("wb"), help="path for the output wav file")
 
-    parser.add_argument("--transpose", "-t", type=int, default=0, help="amount to transpose (semitones)")
-    parser.add_argument("--speed", "-s", type=float, default=1.0, help="speed multiplier for the MIDI")
-    parser.add_argument("--cachesize", "-c", type=float, default=7.5, help="wait time for cache notes the higher the quicker the render but the more memory it uses")
-    parser.add_argument("--binsize", "-b", type=int, default=8192, help="FFT bin size; lower numbers make it faster but more off-pitch")
+    cmd.add_argument("--transpose", "-t", type=int, default=0, help="amount to transpose (semitones)")
+    cmd.add_argument("--speed", "-s", type=float, default=1.0, help="speed multiplier for the MIDI")
+    cmd.add_argument("--cachesize", "-c", type=float, default=7.5, help="wait time for cache notes the higher the quicker the render but the more memory it uses")
+    cmd.add_argument("--binsize", "-b", type=int, default=8192, help="FFT bin size; lower numbers make it faster but more off-pitch")
+    cmd.add_argument("--fullclip", "-f", action="store_true", help="always use the full sample without cropping")
 
-    parser.add_argument("--fullclip", "-f", action="store_true", help="always use the full sample without cropping")
-    parser.add_argument("--optout", "-o", action="store_true", help="opt out of automatic bug reporting (or set the env variable SWOOD_OPTOUT)")
-
+    #config.add_argument("--config", "--cfg", type=argparse.FileType("r"), help="the config file ")
+    
     if swoodlive_installed():
-        parser.add_argument("--live", help="listen on a midi input and generate the output in realtime")
+        mex.add_argument("--live", help="listen on a midi input and generate the output in realtime")
 
+    parser.add_argument("--optout", "-o", action="store_true", help="opt out of automatic bug reporting (or set the env variable SWOOD_OPTOUT)")
     parser.add_argument("--version", "-v", action="version", version=version_info(), help="get the versions of swood and its dependencies")
 
     args = parser.parse_args()
