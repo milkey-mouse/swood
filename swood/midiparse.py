@@ -74,6 +74,8 @@ class MIDIParser:
                         volume -= note.volume
                         self.maxpitch = max(self.maxpitch, note.pitch)
                         note.length = int(time * wav.framerate) - note.starttime
+                    elif message.type == "pitchwheel":
+                        print("pitchwheel {}".format(message.pitch))
 
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
