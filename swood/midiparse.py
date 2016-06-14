@@ -87,8 +87,10 @@ class MIDIParser:
                                 note.length = time_samples - note.starttime
                                 results[note.starttime].append(note)
                                 self.notecount += 1
-                                note.samplestart = note.length
+                                note.samplestart = note.length * #todo: finish
                                 note.length = None
+                                
+                                
                                 note.starttime = time_samples
                                 note.bend = bend
                                 
