@@ -7,17 +7,19 @@ from . import complain
 
 
 class Note:
-    def __init__(self, length=None, pitch=None, volume=None, starttime=None):
+    def __init__(self, length=None, pitch=1, volume=127, starttime=None, bend=0, samplestart=0):
+        self.samplestart = samplestart
         self.starttime = starttime
         self.length = length
         self.volume = volume
         self.pitch = pitch
+        self.bend = bend
 
     def __hash__(self):
         return hash((self.length, self.pitch))
 
     def __eq__(self, other):
-        return self.length == other.length and self.pitch == other.pitch
+        return self.length == other.length and self.pitch == other.pitch and self.bend == other.bend
 
     def __len__(self):
         return len(self.data)
@@ -43,23 +45,27 @@ class MIDIParser:
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
+        bend = 0
 
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
                 time = 0
                 for message in mid:
                     time += message.time / speed
+                    time_samples = int(round(time * wav.framerate)
                     if "channel" in vars(message) and message.channel == 10:
                         continue  # channel 10 is reserved for percussion
                     if message.type == "note_on":
                         note = Note()
-                        note.starttime = int(round(time * wav.framerate))
+                        note.starttime = time_samples
                         note.volume = 127 if message.velocity == 0 else message.velocity
-                        note.pitch = self.note_to_freq(message.note + transpose)
+                        note.pitch = message.note + transpose)
+                        note.bend = bend
                         notes[message.note].append(note)
 
                         volume += note.volume
                         self.maxvolume = max(volume, self.maxvolume)
+                        self.maxpitch = max(self.maxpitch, note.pitch + note.bend)
                     elif message.type == "note_off":
                         note = notes[message.note].pop(0)
                         if len(notes[message.note]) == 0:
@@ -72,13 +78,21 @@ class MIDIParser:
 
                         self.notecount += 1
                         volume -= note.volume
-                        self.maxpitch = max(self.maxpitch, note.pitch)
-                        note.length = int(time * wav.framerate) - note.starttime
+                        note.length = time_samples - note.starttime
                     elif message.type == "pitchwheel":
+                        #stop the note and start a new one at that time
                         bend = message.pitches / 8192 * 12
-                        for note in notes:
-                            #stop the note and start a new one at that time
-                            #and add a field for where in the start of the sample it should be at
+                        for notelist in notes:
+                            for note in notelist:
+                                note.length = time_samples - note.starttime
+                                results[note.starttime].append(note)
+                                self.notecount += 1
+                                note.samplestart = note.length
+                                note.length = None
+                                note.starttime = time_samples
+                                note.bend = bend
+                                
+                            
 
                 if len(notes) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
@@ -94,6 +108,4 @@ class MIDIParser:
         except IndexError:
             raise complain.ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
 
-    def note_to_freq(self, notenum):
-        # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
-        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
+    

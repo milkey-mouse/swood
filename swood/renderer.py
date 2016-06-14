@@ -30,11 +30,15 @@ class NoteRenderer:
 
         self.notecache = {}
 
+    def note_to_freq(self, notenum):
+        # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
+        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
+
     def zoom(self, img, multiplier):
         return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
-        scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
+        scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / self.note_to_freq(note.pitch + note.bend))
         if self.fullclip or len(scaled) < note.length + self.threshold:
             return scaled
         channels = self.sample.channels.shape[0]
