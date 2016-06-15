@@ -34,8 +34,10 @@ class NoteRenderer:
         return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
-        scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / (note.pitch + note.bend))
-        if self.fullclip or len(scaled) < note.length + self.threshold:
+        scale_factor = self.sample.fundamental_freq / note.pitch
+        cut = note.length * self.sample.length * scale_factor + note.samplestart
+        scaled = self.zoom(self.sample.img[note.samplestart:cut], scale_factor)
+        if self.fullclip or cut < note.length + self.threshold:
             return scaled
         channels = self.sample.channels.shape[0]
         if channels == 1:

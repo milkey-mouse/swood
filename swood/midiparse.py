@@ -52,7 +52,7 @@ class MIDIParser:
                     time += message.time / speed
                     if "channel" in vars(message) and message.channel == 10:
                         continue  # channel 10 is reserved for percussion
-                    time_samples = int(round(time * sample.framerate)
+                    time_samples = int(round(time * sample.framerate))
                     if message.type == "note_on":
                         note = Note()
                         note.starttime = time_samples
@@ -80,24 +80,23 @@ class MIDIParser:
                         del note.bend
                     elif message.type == "pitchwheel":
                         #stop the note and start a new one at that time
-                        bend = message.pitches / 8192 * 12
-                        for notelist in playing:
-                            for note in notelist:
-                                note.samplestart = note.length * sample.length * self.sample.fundamental_freq / note.pitch
-                                note.length = time_samples - note.starttime
-                                notes[note.starttime].append(note)
-                                note.starttime = time_samples
-                                self.notecount += 1
-                                note.length = None
-                                note.bend = bend
+                        bend = message.pitch / 8192 * 12
+                        for note in playing:
+                            note.samplestart = note.length * self.sample.length * self.sample.fundamental_freq / note.pitch
+                            note.length = time_samples - note.starttime
+                            notes[note.starttime].append(note)
+                            note.starttime = time_samples
+                            self.notecount += 1
+                            note.length = None
+                            note.bend = bend
                 if len(playing) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for ntime, nlist in playing.items():
                         for note in nlist:
                             note.length = int(time * sample.framerate) - note.starttime
                             self.notecount += 1
-                self.playing = sorted(notes.items(), key=operator.itemgetter(0))
-                self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.playing)
+                self.notes = sorted(notes.items(), key=operator.itemgetter(0))
+                self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = self.note_to_freq(self.maxpitch)
         except IOError:
             raise complain.ComplainToUser("Error opening MIDI file '{}'.".format(filename))
