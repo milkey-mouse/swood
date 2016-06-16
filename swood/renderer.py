@@ -35,10 +35,12 @@ class NoteRenderer:
 
     def render_note(self, note):
         scale_factor = self.sample.fundamental_freq / note.pitch
-        cut = note.length * self.sample.length * scale_factor + note.samplestart
-        scaled = self.zoom(self.sample.img[note.samplestart:cut], scale_factor)
-        if self.fullclip or cut < note.length + self.threshold:
-            return scaled
+        if note.bend:
+            scaled = self.zoom(self.sample.img[note.samplestart:int(round(note.length * scale_factor))], scale_factor)
+        else:
+            scaled = self.zoom(self.sample.img[note.samplestart:cut], scale_factor)
+            if self.fullclip:
+                return self.zoom(self.sample.img[], scale_factor)
         channels = self.sample.channels.shape[0]
         if channels == 1:
             cutoff = argmin(v + (d * 20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
