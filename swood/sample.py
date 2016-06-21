@@ -47,7 +47,7 @@ class Sample:
                 else:
                     raise wave.Error
 
-                wav = np.zeros((self.channels, self.length), dtype=self.size)
+                wav = np.empty((self.channels, self.length), dtype=self.size)
                 for i in range(0, self.length):
                     frame = wavfile.readframes(1)
                     for chan in range(self.channels):
