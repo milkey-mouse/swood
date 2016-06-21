@@ -30,7 +30,6 @@ class Note:
     def finalize(self, time):
         self.pitch = note_to_freq(self.pitch + self.bend)
         self.length = time - self.start
-        self.bend = (self.bend != 0)
 
 
 class CachedNote:
@@ -75,20 +74,21 @@ class MIDIParser:
                         note = playing[message.note].pop()
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
+                        note.finalize(time_samples)
+                        note.bend = False
                         try:
                             notes[note.start].append(note)
                         except IndexError:
                             print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
-
                         self.notecount += 1
                         volume -= note.volume
-                        note.finalize(time_samples)
                     elif message.type == "pitchwheel":
                         #stop the note and start a new one at that time
                         bend = message.pitch / 8192 * 12
                         for notelist in playing.values():
                             for note in notelist:
                                 note.finalize(time_samples)
+                                note.bend = True
                                 notes[note.start].append(copy(note))
                                 note.start = time_samples
                                 self.notecount += 1

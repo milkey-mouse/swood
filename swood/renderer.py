@@ -3,8 +3,7 @@ import math
 
 from PIL import Image
 import progressbar
-import numpy as np
-from numpy import zeros, asarray, argmin, resize, int32
+from numpy import empty, zeros, asarray, argmin, resize, int32
 
 from . import midiparse
 from . import wavout
@@ -34,26 +33,23 @@ class NoteRenderer:
         return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
-        scale_factor = self.sample.fundamental_freq / note.pitch
-        if self.fullclip:
-            if note.bend:
-                return self.zoom(self.sample.img[note.start:note.start+int((note.length+1) * scale_factor)], scale_factor)[:note.length]
-            else:
-                return self.zoom(self.sample.img, scale_factor)
+        scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
+        if note.bend:
+            return scaled[:,note.start:note.start+note.length]
+        elif self.fullclip:
+            return scaled
         else:
-            scaled = self.zoom(self.sample.img[note.start:note.start+int((note.length+1) * scale_factor)], scale_factor)
-            channels = self.sample.channels.shape[0]
+            scaled.setflags(write=True)
             max_cutoff = 0
-            for chan in range(channels):
+            for chan in range(self.sample.channels):
                 # find the nearest/closest zero crossing within the threshold and continue until that
                 # this removes most "clicking" sounds from the audio suddenly cutting out
-                sample_end = np.empty(self.threshold)
+                sample_end = empty(self.threshold, dtype=int32)
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
                     sample_end[distance] = (val) + (distance * 20)
                 cutoff = argmin(sample_end) + note.length
                 max_cutoff = max(cutoff, max_cutoff)
-                scaled[chan][cutoff:] = 0
-            scaled.resize((self.sample.channels, max_cutoff))
+                scaled[chan:chan][cutoff:] = 0
             return scaled
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
@@ -94,7 +90,7 @@ class NoteRenderer:
                 else:
                     rendered_note = CachedNote(time, self.render_note(note))
                     notecache[hash(note)] = rendered_note
-                add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)).astype(int32))
+                add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)))
 
                 if pbar:
                     # increment progress bar
