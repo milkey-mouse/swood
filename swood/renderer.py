@@ -40,24 +40,24 @@ class NoteRenderer:
         else:
             scaled = self.zoom(self.sample.img[note.samplestart:cut], scale_factor)
             if self.fullclip:
-                return self.zoom(self.sample.img[], scale_factor)
+                return self.zoom(self.sample.img, scale_factor)
         channels = self.sample.channels.shape[0]
         if channels == 1:
             cutoff = argmin(v + (d * 20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
             return np.resize(scaled, (1, note.length + cutoff))
         else:
-            cutoffs = [None] * channels
+            cutoffs = np.empty(channels)
             for chan in range(channels):
                 # find the nearest/closest zero crossing within the threshold and continue until that
                 sample_end = np.empty(self.threshold)
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
                     sample_end[distance] = (val) + (distance * 20)
                 cutoffs[chan] = argmin(sample_end)
-            merged_channels = zeros((channels, note.length + max(cutoffs)), dtype=int32)
+            scaled.resize((channels, note.length + max(cutoffs)))
             for chan in range(channels):
                 cutoff = note.length + cutoffs[chan]
-                merged_channels[chan][:cutoff] = scaled[chan][:cutoff]
-            return merged_channels
+                scaled[chan][cutoff:] = 0
+            return scaled
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
         if self.fullclip:
