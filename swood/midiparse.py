@@ -89,13 +89,14 @@ class MIDIParser:
                     elif message.type == "pitchwheel":
                         #stop the note and start a new one at that time
                         bend = message.pitch / 8192 * 12
-                        for note in playing:
-                            note.finalize(time_samples)
-                            notes[note.start].append(copy(note))
-                            note.start = time_samples
-                            self.notecount += 1
-                            note.length = None
-                            note.bend = bend
+                        for notelist in playing:
+                            for note in notelist:
+                                note.finalize(time_samples)
+                                notes[note.start].append(copy(note))
+                                note.start = time_samples
+                                self.notecount += 1
+                                note.length = None
+                                note.bend = bend
                 if len(playing) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for ntime, nlist in playing.items():
