@@ -35,28 +35,25 @@ class NoteRenderer:
 
     def render_note(self, note):
         scale_factor = self.sample.fundamental_freq / note.pitch
-        if note.bend:
-            scaled = self.zoom(self.sample.img[note.samplestart:int(round(note.length * scale_factor))], scale_factor)
-        else:
-            scaled = self.zoom(self.sample.img[note.samplestart:cut], scale_factor)
-            if self.fullclip:
+        if self.fullclip:
+            if note.bend:
+                return self.zoom(self.sample.img[note.start:note.start+int((note.length+1) * scale_factor)], scale_factor)[:note.length]
+            else:
                 return self.zoom(self.sample.img, scale_factor)
-        channels = self.sample.channels.shape[0]
-        if channels == 1:
-            cutoff = argmin(v + (d * 20) for d, v in enumerate(scaled[0][note.length:note.length + self.threshold]))
-            return np.resize(scaled, (1, note.length + cutoff))
         else:
-            cutoffs = np.empty(channels)
+            scaled = self.zoom(self.sample.img[note.start:note.start+int((note.length+1) * scale_factor)], scale_factor)
+            channels = self.sample.channels.shape[0]
+            max_cutoff = 0
             for chan in range(channels):
                 # find the nearest/closest zero crossing within the threshold and continue until that
+                # this removes most "clicking" sounds from the audio suddenly cutting out
                 sample_end = np.empty(self.threshold)
                 for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
                     sample_end[distance] = (val) + (distance * 20)
-                cutoffs[chan] = argmin(sample_end)
-            scaled.resize((channels, note.length + max(cutoffs)))
-            for chan in range(channels):
-                cutoff = note.length + cutoffs[chan]
+                cutoff = argmin(sample_end) + note.length
+                max_cutoff = max(cutoff, max_cutoff)
                 scaled[chan][cutoff:] = 0
+            scaled.resize((self.sample.channels, max_cutoff))
             return scaled
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
