@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import copy
 import collections
 import operator
 
@@ -11,10 +11,11 @@ def note_to_freq(notenum):
         return (2.0 ** ((min(notenum, 0) - 69) / 12.0)) * 440.0
 
 class Note:
-    def __init__(self, length=None, pitch=1, volume=127, start=0, bend=0):
-        self.start = start
+    def __init__(self, samplestart=0, length=0, volume=127, start=0, pitch=0, bend=0):
+        self.samplestart = samplestart
         self.length = length
         self.volume = volume
+        self.start = start
         self.pitch = pitch
         self.bend = bend
 
@@ -28,7 +29,7 @@ class Note:
         return len(self.data)
 
     def __repr__(self):
-        return "Note(length={}, pitch={}, start={}, bend={})".format(self.length, self.pitch, self.start, self.bend)
+        return "Note(length={}, pitch={}, start={}, samplestart={}, bend={})".format(self.length, self.pitch, self.start, self.samplestart, self.bend)
 
     def finalize(self, time):
         self.pitch = note_to_freq(self.pitch + self.bend)
@@ -86,18 +87,20 @@ class MIDIParser:
                         self.notecount += 1
                         volume -= note.volume
                     elif message.type == "pitchwheel":
-                        #stop the note and start a new one at that time
-                        bend = message.pitch / 8192 * 12
-                        print(bend)
-                        for notelist in playing.values():
-                            for note in notelist:
-                                note.finalize(time_samples)
-                                note.bend = True
-                                notes[note.start].append(deepcopy(note))
-                                note.start = time_samples
-                                self.notecount += 1
-                                note.length = None
-                                note.bend = bend
+                        # stop the note and start a new one at that time
+                        newbend = message.pitch / 8192 * 12
+                        if newbend != bend:
+                            bend = newbend
+                            for notelist in playing.values():
+                                for note in notelist:
+                                    note.finalize(time_samples)
+                                    note.bend = True
+                                    notes[note.start].append(copy(note))
+                                    note.samplestart = int(round(note.length * sample.fundamental_freq / note.pitch))
+                                    note.start = note.length
+                                    self.notecount += 1
+                                    note.length = None
+                                    note.bend = bend
                 if len(playing) != 0:
                     print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for notelist in playing.values():

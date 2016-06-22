@@ -35,21 +35,23 @@ class NoteRenderer:
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
         if note.bend:
-            return scaled[:,note.start:note.start+note.length]
+            return scaled[note.samplestart:note.samplestart+note.length]
         elif self.fullclip:
             return scaled
         else:
             scaled.setflags(write=True)
             max_cutoff = 0
-            for chan in range(self.sample.channels):
-                # find the nearest/closest zero crossing within the threshold and continue until that
-                # this removes most "clicking" sounds from the audio suddenly cutting out
-                sample_end = empty(self.threshold, dtype=int32)
-                for distance, val in enumerate(scaled[chan][note.length:note.length + self.threshold]):
-                    sample_end[distance] = (val) + (distance * 20)
-                cutoff = argmin(sample_end) + note.length
-                max_cutoff = max(cutoff, max_cutoff)
-                scaled[chan:chan][cutoff:] = 0
+            # find the nearest/closest zero crossing within the threshold and continue until that
+            # this removes most "clicking" sounds from the audio suddenly cutting out
+            cutoffs = zeros(self.sample.channels, dtype=int32)
+            sample_end = empty(self.threshold, dtype=int32)
+            for distance, sample in enumerate(scaled[note.length:note.length + self.threshold]):
+                for chnum, val in enumerate(sample):
+                    cutoffs[chnum] = max(cutoffs[chnum], val + distance * 20)
+            # scaled.resize((self.sample.channels, max(cutoffs)))
+            # TODO: can't resize without taking ownership of image byte array, but that's really hacky
+            for chan, cutoff in enumerate(cutoffs):
+                scaled[:,chan][cutoff:] = 0
             return scaled
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
