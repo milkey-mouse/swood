@@ -1,4 +1,4 @@
-from copy import copy
+from copy import deepcopy
 import collections
 import operator
 
@@ -26,6 +26,9 @@ class Note:
 
     def __len__(self):
         return len(self.data)
+
+    def __repr__(self):
+        return "Note(length={}, pitch={}, start={}, bend={})".format(self.length, self.pitch, self.start, self.bend)
 
     def finalize(self, time):
         self.pitch = note_to_freq(self.pitch + self.bend)
@@ -85,11 +88,12 @@ class MIDIParser:
                     elif message.type == "pitchwheel":
                         #stop the note and start a new one at that time
                         bend = message.pitch / 8192 * 12
+                        print(bend)
                         for notelist in playing.values():
                             for note in notelist:
                                 note.finalize(time_samples)
                                 note.bend = True
-                                notes[note.start].append(copy(note))
+                                notes[note.start].append(deepcopy(note))
                                 note.start = time_samples
                                 self.notecount += 1
                                 note.length = None
@@ -103,6 +107,8 @@ class MIDIParser:
                 self.notes = sorted(notes.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.start + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = note_to_freq(self.maxpitch)
+                import pprint
+                pprint.pprint(self.notes)
         except IOError:
             raise complain.ComplainToUser("Error opening MIDI file '{}'.".format(filename))
         except IndexError:
