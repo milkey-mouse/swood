@@ -34,7 +34,7 @@ class Note:
     def finalize(self, time):
         self.pitch = note_to_freq(self.pitch + self.bend)
         self.length = time - self.start
-
+        return self
 
 class CachedNote:
     def __init__(self, length, rendered):
@@ -75,15 +75,15 @@ class MIDIParser:
                         self.maxvolume = max(volume, self.maxvolume)
                         self.maxpitch = max(self.maxpitch, message.note + transpose + bend)
                     elif message.type == "note_off":
-                        note = playing[message.note].pop()
+                        try:
+                            note = playing[message.note].pop()
+                        except IndexError:  # the pop will fail if there aren't any matching notes playing
+                            print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
                         note.finalize(time_samples)
                         note.bend = False
-                        try:
-                            notes[note.start].append(note)
-                        except IndexError:
-                            print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
+                        notes[note.start].append(note)
                         self.notecount += 1
                         volume -= note.volume
                     elif message.type == "pitchwheel":
@@ -93,9 +93,11 @@ class MIDIParser:
                             bend = newbend
                             for notelist in playing.values():
                                 for note in notelist:
-                                    note.finalize(time_samples)
-                                    note.bend = True
-                                    notes[note.start].append(copy(note))
+                                    oldnote = copy(note)
+                                    oldnote.finalize(time_samples)
+                                    oldnote.bend = True
+                                    notes[note.start].append(oldnote)
+
                                     note.samplestart = int(round(note.length * sample.fundamental_freq / note.pitch))
                                     note.start = note.length
                                     self.notecount += 1
