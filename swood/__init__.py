@@ -18,7 +18,7 @@ def swoodlive_installed():
     return importlib.util.find_spec("swoodlive") is not None
 
 
-def run_cmd():
+def run_cmd(argv):
     parser = argparse.ArgumentParser(description="swood.exe: the automatic ytpmv generator", formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument("sample", type=argparse.FileType("rb"), help="a short wav file to sample as the instrument")
@@ -38,7 +38,7 @@ def run_cmd():
     parser.add_argument("--optout", "-o", action="store_true", help="opt out of automatic bug reporting (or set the env variable SWOOD_OPTOUT)")
     parser.add_argument("--version", "-v", action="version", version=version_info(), help="get the versions of swood and its dependencies")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     from . import complain
     from . import midiparse
@@ -54,4 +54,4 @@ def run_cmd():
 
 
 if __name__ == "__main__":
-    run_cmd()
+    run_cmd(sys.argv)
