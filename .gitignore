@@ -135,5 +135,8 @@ ENV/
 # Rope project settings
 .ropeproject
 
-#Visual Studio Code stuff
+# Visual Studio Code stuff
 .vscode/
+
+# Ignore test outputs
+tests/outputs/

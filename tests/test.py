@@ -38,6 +38,7 @@ def run(midi, *args, play=False):
         if running_player:
             running_player.wait()
         running_player = play_audio(out)
+        os.remove(out)
 
 if sys.argv[1] == "playall":
     run("beethoven", play=True)

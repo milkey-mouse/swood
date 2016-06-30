@@ -103,8 +103,6 @@ class MIDIParser:
                 self.notes = sorted(notes.items(), key=operator.itemgetter(0))
                 self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = note_to_freq(self.maxpitch)
-                import pprint
-                pprint.pprint(self.notes)
         except IOError:
             raise complain.ComplainToUser("Error opening MIDI file '{}'.".format(filename))
         except IndexError:
