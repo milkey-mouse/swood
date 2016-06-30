@@ -12,7 +12,7 @@ def find_program(prog):
             return vlc_location, args
     return None
 
-def play(clip):
+def play_audio(clip):
     import subprocess
     if os.name == "nt":
         if os.path.isfile("C:/Program Files (x86)/VideoLAN/VLC/vlc.exe"):
@@ -29,22 +29,23 @@ def play(clip):
 running_player = None
 
 def run(midi, *args, play=False):
-    out = "samples/" + midi + ".wav"
-    try:
-        swood.run_cmd(["samples/doot.wav", "midis/" + midi + ".mid", out, *args])
-    except exc as BaseException:  # if I let any exception through the VS Code Python debugger will catch it
-        if isinstance(exc, Exception):
-            raise
-    if play:
+    global running_player
+    out = "outputs/" + midi + ".wav"
+    swood.run_cmd(["samples/doot.wav", "midis/" + midi + ".mid", out, *args])
+    if play:    
+        if not os.path.isfile(out):
+            return
         if running_player:
             running_player.wait()
-        running_player = play(out)
+        running_player = play_audio(out)
 
 if sys.argv[1] == "playall":
-    run("pitchbend")
+    run("beethoven", play=True)
+    run("dummy", play=True)
+    run("pitchbend", play=True)
 elif sys.argv[1] == "all":
     run("beethoven")
     run("dummy")
     run("pitchbend")
 elif sys.argv[1] == "bend":
-    run("pitchbend")
+    run("pitchbend", play=True)

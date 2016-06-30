@@ -8,19 +8,19 @@ from . import complain
 
 def note_to_freq(notenum):
         # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
-        return (2.0 ** ((min(notenum, 0) - 69) / 12.0)) * 440.0
+        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
 
 class Note:
-    def __init__(self, samplestart=0, length=0, volume=127, start=0, pitch=0, bend=0):
+    def __init__(self, samplestart=0, length=0, volume=127, starttime=0, pitch=0, bend=0):
         self.samplestart = samplestart
+        self.starttime = starttime
         self.length = length
         self.volume = volume
-        self.start = start
         self.pitch = pitch
         self.bend = bend
 
     def __hash__(self):
-        return hash((self.length, self.pitch))
+        return hash((self.length, self.pitch, self.samplestart))
 
     def __eq__(self, other):
         return self.length == other.length and self.pitch == other.pitch
@@ -29,21 +29,12 @@ class Note:
         return len(self.data)
 
     def __repr__(self):
-        return "Note(length={}, pitch={}, start={}, samplestart={}, bend={})".format(self.length, self.pitch, self.start, self.samplestart, self.bend)
+        return "Note(length={}, pitch={}, starttime={}, samplestart={}, bend={})".format(self.length, self.pitch, self.starttime, self.samplestart, self.bend)
 
     def finalize(self, time):
-        self.pitch = note_to_freq(self.pitch + self.bend)
-        self.length = time - self.start
+        self.pitch = note_to_freq(self.pitch + self.bend) 
+        self.length = time - self.starttime
         return self
-
-class CachedNote:
-    def __init__(self, length, rendered):
-        self.used = 1
-        self.length = length
-        self.data = rendered
-
-    def __len__(self):
-        return len(self.data)
 
 
 class MIDIParser:
@@ -67,7 +58,7 @@ class MIDIParser:
                     # ugh, string-typing
                     if message.type == "note_on":
                         playing[message.note].append(
-                            Note(start=time_samples,
+                            Note(starttime=time_samples,
                             volume=message.velocity,
                             pitch=message.note+transpose,
                             bend=bend))
@@ -83,7 +74,7 @@ class MIDIParser:
                             del playing[message.note]
                         note.finalize(time_samples)
                         note.bend = False
-                        notes[note.start].append(note)
+                        notes[note.starttime].append(note)
                         self.notecount += 1
                         volume -= note.volume
                     elif message.type == "pitchwheel":
@@ -98,8 +89,8 @@ class MIDIParser:
                                     oldnote.bend = True
                                     notes[note.start].append(oldnote)
 
-                                    note.samplestart = int(round(note.length * sample.fundamental_freq / note.pitch))
-                                    note.start = note.length
+                                    note.samplestart = int(round(oldnote.length / oldnote.pitch))
+                                    note.start = oldnote.length
                                     self.notecount += 1
                                     note.length = None
                                     note.bend = bend
@@ -110,7 +101,7 @@ class MIDIParser:
                             note.length = int(time * sample.framerate) - note.start
                             self.notecount += 1
                 self.notes = sorted(notes.items(), key=operator.itemgetter(0))
-                self.length = max(max(note.start + note.length for note in nlist) for _, nlist in self.notes)
+                self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = note_to_freq(self.maxpitch)
                 import pprint
                 pprint.pprint(self.notes)

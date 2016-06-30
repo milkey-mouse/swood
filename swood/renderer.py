@@ -5,10 +5,18 @@ from PIL import Image
 import progressbar
 from numpy import empty, zeros, asarray, argmin, resize, int32
 
-from . import midiparse
 from . import wavout
 
-CachedNote = midiparse.CachedNote
+
+class CachedNote:
+    def __init__(self, length, rendered, cutoffs):
+        self.used = 1
+        self.length = length
+        self.data = rendered
+        self.cutoffs = cutoffs
+
+    def __len__(self):
+        return len(self.data)
 
 
 class FileSaveType(Enum):
@@ -37,22 +45,21 @@ class NoteRenderer:
         if note.bend:
             return scaled[note.samplestart:note.samplestart+note.length]
         elif self.fullclip:
-            return scaled
+            return scaled, np.full(self.sample.channels, scaled.shape[0], dtype=int32)
         else:
-            scaled.setflags(write=True)
-            max_cutoff = 0
-            # find the nearest/closest zero crossing within the threshold and continue until that
+            # find the closest zero crossing within the threshold and continue until that
             # this removes most "clicking" sounds from the audio suddenly cutting out
             cutoffs = zeros(self.sample.channels, dtype=int32)
+            cutoff_scores = zeros(self.sample.channels, dtype=int32)
             sample_end = empty(self.threshold, dtype=int32)
             for distance, sample in enumerate(scaled[note.length:note.length + self.threshold]):
                 for chnum, val in enumerate(sample):
-                    cutoffs[chnum] = max(cutoffs[chnum], val + distance * 20)
-            # scaled.resize((self.sample.channels, max(cutoffs)))
-            # TODO: can't resize without taking ownership of image byte array, but that's really hacky
-            for chan, cutoff in enumerate(cutoffs):
-                scaled[:,chan][cutoff:] = 0
-            return scaled
+                    score = val + distance * 20
+                    if score > cutoff_scores[chnum]:
+                        cutoff_scores[chnum] = score
+                        cutoffs[chnum] = val
+            cutoffs += note.length
+            return scaled, cutoffs
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
         if self.fullclip:
@@ -90,9 +97,10 @@ class NoteRenderer:
                     rendered_note = notecache[hash(note)]
                     rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
-                    rendered_note = CachedNote(time, self.render_note(note))
+                    rendered_note = CachedNote(time, *self.render_note(note))
                     notecache[hash(note)] = rendered_note
-                add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)))
+                if rendered_note.data.shape[0] != 0:
+                    add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)), rendered_note.cutoffs)
 
                 if pbar:
                     # increment progress bar
