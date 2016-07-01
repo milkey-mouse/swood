@@ -15,8 +15,7 @@ class UncachedWavFile:
 
     def add_data(self, start, data, cutoffs):
         for chan in range(self.channels.shape[0]):
-            length = min(self.channels.shape[1] - start, cutoffs[chan])
-            #print(self.channels[chan][start:start + length].shape, data[chan][:length].shape, length)
+            length = min(self.channels.shape[1] - start, data.shape[1], cutoffs[chan])
             self.channels[chan][start:start + length] += data[chan][:length].astype(self.channels.dtype)
 
     def save(self):

@@ -49,4 +49,4 @@ elif sys.argv[1] == "all":
     run("dummy")
     run("pitchbend")
 elif sys.argv[1] == "bend":
-    run("pitchbend", play=True)
+    run("pitchbend")
