@@ -49,7 +49,7 @@ def run_cmd(argv):
         sample = sample.Sample(args.sample, args.binsize)
         midi = midiparse.MIDIParser(args.midi, sample, args.transpose, args.speed)
         renderer = renderer.NoteRenderer(sample, args.fullclip, args.cachesize)
-        renderer.render(midi, args.output)
+        renderer.render(midi, args.output, pbar="--no-pbar" in argv)
 
 
 
