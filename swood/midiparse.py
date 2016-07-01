@@ -87,7 +87,7 @@ class MIDIParser:
                                     oldnote = copy(note)
                                     oldnote.finalize(time_samples)
                                     oldnote.bend = True
-                                    notes[note.start].append(oldnote)
+                                    notes[note.starttime].append(oldnote)
 
                                     note.samplestart = int(round(oldnote.length / oldnote.pitch))
                                     note.start = oldnote.length

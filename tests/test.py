@@ -36,14 +36,19 @@ def run(midi, *args, play=False):
         if not os.path.isfile(out):
             return
         if running_player:
+            os.remove(out)
             running_player.wait()
         running_player = play_audio(out)
-        os.remove(out)
 
 if sys.argv[1] == "playall":
-    run("beethoven", play=True)
-    run("dummy", play=True)
-    run("pitchbend", play=True)
+    try:
+        run("beethoven", play=True)
+        run("dummy", play=True)
+        run("pitchbend", play=True)
+    finally:
+        import glob
+        for wav in glob.iglob("outputs/*.wav"):
+            os.remove(wav)
 elif sys.argv[1] == "all":
     run("beethoven")
     run("dummy")
