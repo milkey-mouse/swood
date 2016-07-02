@@ -32,6 +32,7 @@ def run_cmd(argv=sys.argv):
     parser.add_argument("--cachesize", "-c", type=float, default=7.5, help="how long to save cached notes")
     parser.add_argument("--binsize", "-b", type=int, default=8192, help="FFT bin size; lower numbers make it faster but more off-pitch")
     parser.add_argument("--fullclip", "-f", action="store_true", help="always use the full sample without cropping")
+    parser.add_argument("--no-pbar", "-p", action="store_false", help="don't show progress bar while rendering")
     
     if swoodlive_installed():
         parser.add_argument("--live", help="listen on a midi input and generate the output in realtime")
@@ -50,9 +51,9 @@ def run_cmd(argv=sys.argv):
         sample = sample.Sample(args.sample, args.binsize)
         midi = midiparse.MIDIParser(args.midi, sample, args.transpose, args.speed)
         renderer = renderer.NoteRenderer(sample, args.fullclip, args.cachesize)
-        renderer.render(midi, args.output, pbar="--no-pbar" in argv)
+        renderer.render(midi, args.output, pbar=args.no_pbar)
 
 
 
 if __name__ == "__main__":
-    run_cmd(sys.argv)
+    run_cmd()
