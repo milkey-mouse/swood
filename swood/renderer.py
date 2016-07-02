@@ -57,8 +57,9 @@ class NoteRenderer:
                     score = val + distance * 20
                     if score > cutoff_scores[chnum]:
                         cutoff_scores[chnum] = score
-                        cutoffs[chnum] = val
+                        cutoffs[chnum] = distance
             cutoffs += note.length
+            print(scaled.shape)
             return scaled, cutoffs
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
