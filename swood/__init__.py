@@ -1,6 +1,7 @@
 import pkg_resources
 import argparse
 import mido
+import sys
 
 
 def version_info():
@@ -18,7 +19,7 @@ def swoodlive_installed():
     return importlib.util.find_spec("swoodlive") is not None
 
 
-def run_cmd(argv):
+def run_cmd(argv=sys.argv):
     parser = argparse.ArgumentParser(description="swood.exe: the automatic ytpmv generator", formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument("sample", type=argparse.FileType("rb"), help="a short wav file to sample as the instrument")
