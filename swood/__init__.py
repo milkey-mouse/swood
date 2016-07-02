@@ -32,7 +32,7 @@ def run_cmd(argv=sys.argv):
     parser.add_argument("--cachesize", "-c", type=float, default=7.5, help="how long to save cached notes")
     parser.add_argument("--binsize", "-b", type=int, default=8192, help="FFT bin size; lower numbers make it faster but more off-pitch")
     parser.add_argument("--fullclip", "-f", action="store_true", help="always use the full sample without cropping")
-    parser.add_argument("--no-pbar", "-p", action="store_false", help="don't show progress bar while rendering")
+    parser.add_argument("--no-pbar", "-p", action="store_false", help=argparse.SUPPRESS)
     
     if swoodlive_installed():
         parser.add_argument("--live", help="listen on a midi input and generate the output in realtime")
