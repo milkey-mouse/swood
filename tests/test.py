@@ -30,6 +30,7 @@ running_player = None
 
 def run(midi, *args, play=False):
     global running_player
+    print("~~~~~~~~~~ Testing '{}' ~~~~~~~~~~".format(midi))
     out = "outputs/" + midi + ".wav"
     swood.run_cmd(["samples/doot.wav", "midis/" + midi + ".mid", out, "--no-pbar", *args])
     if play:    
