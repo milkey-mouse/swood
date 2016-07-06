@@ -37,8 +37,8 @@ def run(midi, *args, play=False):
         if not os.path.isfile(out):
             return
         if running_player:
-            os.remove(out)
             running_player.wait()
+            os.remove(running_player.args[1])
         running_player = play_audio(out)
 
 if sys.argv[1] == "playall":
