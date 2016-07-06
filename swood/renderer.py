@@ -3,7 +3,7 @@ import math
 
 from PIL import Image
 import progressbar
-from numpy import empty, zeros, asarray, argmin, resize, int32
+from numpy import empty, zeros, asarray, argmin, resize, int32, full
 
 from . import wavout
 
@@ -43,32 +43,36 @@ class NoteRenderer:
     def render_note(self, note):
         scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
         if note.bend:
-            return scaled[note.samplestart:note.samplestart+note.length]
-        elif self.fullclip:
-            return scaled, np.full(self.sample.channels, scaled.shape[0], dtype=int32)
+            return scaled[note.samplestart:note.samplestart+note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
         else:
             # find the closest zero crossing within the threshold and continue until that
             # this removes most "clicking" sounds from the audio suddenly cutting out
             cutoffs = zeros(self.sample.channels, dtype=int32)
             cutoff_scores = zeros(self.sample.channels, dtype=int32)
-            sample_end = empty(self.threshold, dtype=int32)
-            for distance, sample in enumerate(scaled[note.length:note.length + self.threshold]):
-                for chnum, val in enumerate(sample):
-                    score = val + distance * 20
-                    if score > cutoff_scores[chnum]:
-                        cutoff_scores[chnum] = score
-                        cutoffs[chnum] = distance
+            distance_multiplier = 0.5 / self.threshold
+            if self.fullclip or scaled.shape[1] <= note.length:
+                for channel, channel_data in enumerate(scaled[:-self.threshold:-1]):
+                    for distance, val in enumerate(channel_data):
+                        score = abs(val) + distance * distance_multiplier
+                        if score < cutoff_scores[channel]:
+                            cutoff_scores[channel] = score
+                            cutoffs[channel] = -distance
+            else:
+                for distance, sample in enumerate(scaled[note.length:note.length + self.threshold]):
+                    for channel, val in enumerate(sample):
+                        score = abs(val) + distance * distance_multiplier
+                        if score < cutoff_scores[channel]:
+                            cutoff_scores[channel] = score
+                            cutoffs[channel] = distance
             cutoffs += note.length
-            print(scaled.shape)
             return scaled, cutoffs
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
         if self.fullclip:
             # leave a small buffer at the end with space for one more sample
-            end_buffer = int(math.ceil(midi.maxpitch * len(self.sample)))
+            output_length = midi.length + int(math.ceil(midi.maxpitch * len(self.sample)))
         else:
-            end_buffer = self.threshold  # it has to cut off sounds at the threshold anyway
-        output_length = midi.length + end_buffer
+            output_length = midi.length + self.threshold  # it has to cut off sounds at the threshold anyway
 
         if savetype == FileSaveType.SMART_CACHING:
             #output = CachedWavFile(output_length, filename, self.sample.framerate)
