@@ -1,4 +1,5 @@
 from time import sleep
+import time
 import sys
 import os
 
@@ -32,7 +33,9 @@ def run(midi, *args, play=False):
     global running_player
     print("~~~~~~~~~~ Testing '{}' ~~~~~~~~~~".format(midi))
     out = "outputs/" + midi + ".wav"
+    start = time.perf_counter()
     swood.run_cmd(["samples/doot.wav", "midis/" + midi + ".mid", out, "--no-pbar", *args])
+    print("Finished '{}' in {} seconds.".format(midi, round(time.perf_counter() - start, 2)))
     if play:    
         if not os.path.isfile(out):
             return
