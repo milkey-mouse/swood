@@ -9,11 +9,9 @@
             "program": "${workspaceRoot}/tests/test.py",
             "args": ["playall"],
             "debugOptions": [
-                "WaitOnAbnormalExit",
-                "WaitOnNormalExit",
                 "RedirectOutput"
             ],
-            "env": {"SWOOD_OPTOUT":"1"}
+            "env": {"SWOOD_OPTOUT":"1"},
         },
         {
             "name": "swood (test all)",
@@ -23,8 +21,6 @@
             "program": "${workspaceRoot}/tests/test.py",
             "args": ["all"],
             "debugOptions": [
-                "WaitOnAbnormalExit",
-                "WaitOnNormalExit",
                 "RedirectOutput"
             ],
             "env": {"SWOOD_OPTOUT":"1"}
@@ -37,8 +33,6 @@
             "program": "${workspaceRoot}/tests/test.py",
             "args": ["bend"],
             "debugOptions": [
-                "WaitOnAbnormalExit",
-                "WaitOnNormalExit",
                 "RedirectOutput"
             ],
             "env": {"SWOOD_OPTOUT":"1"}

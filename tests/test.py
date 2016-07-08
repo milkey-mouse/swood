@@ -3,14 +3,16 @@ import time
 import sys
 import os
 
-sys.path.insert(0, os.path.realpath("../../swood"))
+sys.path.insert(0, os.path.realpath(".."))
 import swood
+assert(os.path.realpath(swood.__file__) ==
+       os.path.realpath("../swood/__init__.py"))
 
 
 def find_program(prog):
     for path in os.environ["PATH"].split(os.pathsep):
         vlc_location = os.path.join(path.strip('"'), prog)
-        if os.path.isfile(fpath):
+        if os.path.isfile(path):
             return vlc_location, args
     return None
 
@@ -37,8 +39,8 @@ def run(midi, *args, play=False, wait=False):
     print("~~~~~~~~~~ Testing '{}' ~~~~~~~~~~".format(midi))
     out = "outputs/" + midi + ".wav"
     start = time.perf_counter()
-    swood.run_cmd(["samples/doot.wav", "midis/" +
-                   midi + ".mid", out, "--no-pbar", *args])
+    swood.run_cmd(argv=["samples/doot.wav", "midis/" +
+                        midi + ".mid", out, "--no-pbar", *args])
     print("Finished '{}' in {} seconds.".format(
         midi, round(time.perf_counter() - start, 2)))
     if play:
