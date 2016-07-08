@@ -8,6 +8,7 @@ class ComplainToUser(Exception):
 
 
 class ComplaintFormatter(object):
+
     def __enter__(self):
         pass
 
