@@ -59,7 +59,8 @@ class NoteRenderer:
                 note_ending = scaled[note.length:note.length + self.threshold]
                 distance_multiplier = self.distance_multiplier
             else:
-                note_ending = scaled[]
+                start = min(0, note.length-self.threshold)
+                note_ending = scaled[start:]
                 distance_multiplier = -self.distance_multiplier
             for distance, sample in enumerate(note_ending):
                 print("meme")
