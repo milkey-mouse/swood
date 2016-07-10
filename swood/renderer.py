@@ -9,6 +9,7 @@ from . import wavout
 
 
 class CachedNote:
+
     def __init__(self, length, rendered, cutoffs):
         self.used = 1
         self.length = length
@@ -26,6 +27,7 @@ class FileSaveType(Enum):
 
 
 class NoteRenderer:
+
     def __init__(self, sample, fullclip=False, cachesize=7.5, threshold=0.05):
         if threshold < 0:
             return ValueError("The threshold must be a positive number.")
@@ -45,35 +47,35 @@ class NoteRenderer:
         return asarray(img.resize((int(round(img.size[0] * multiplier)), self.sample.channels), resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
-        scaled = self.zoom(self.sample.img, self.sample.fundamental_freq / note.pitch)
+        scaled = self.zoom(
+            self.sample.img, self.sample.fundamental_freq / note.pitch)
         if note.bend:
-            return scaled[note.samplestart:note.samplestart+note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
+            return scaled[note.samplestart:note.samplestart + note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
         else:
-            print("wat")
             # find the closest zero crossing within the threshold and continue until that
-            # this removes most "clicking" sounds from the audio suddenly cutting out
+            # this removes most "clicking" sounds from the audio suddenly
+            # cutting out
             cutoffs = zeros(self.sample.channels, dtype=int32)
-            cutoff_scores = full(self.sample.channels, self.maxint32, dtype=int32)
-            print("dist")
+            cutoff_scores = full(self.sample.channels,
+                                 self.maxint32, dtype=int32)
             if scaled.shape[1] > note.length:
                 note_ending = scaled[note.length:note.length + self.threshold]
                 distance_multiplier = self.distance_multiplier
             else:
-                start = min(0, note.length-self.threshold)
+                start = min(0, note.length - self.threshold)
                 note_ending = scaled[start:]
                 distance_multiplier = -self.distance_multiplier
             for distance, sample in enumerate(note_ending):
-                print("meme")
                 for channel, val in enumerate(sample):
                     score = abs(val) + (distance * distance_multiplier)
                     if score < cutoff_scores[channel]:
                         cutoff_scores[channel] = score
                         cutoffs[channel] = distance
-                        print(self.threshold / distance)
                     else:
                         print(score, cutoff_scores[channel])
-            cutoffs += note.length
             print("end", cutoffs)
+            cutoffs += note.length
+            
             return scaled, cutoffs
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
