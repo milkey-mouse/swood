@@ -3,7 +3,7 @@ import math
 
 from PIL import Image
 import progressbar
-from numpy import empty, zeros, asarray, argmin, resize, int32, full, iinfo
+from numpy import empty, zeros, asarray, argmin, resize, int32, int64, full, iinfo
 
 from . import wavout
 
@@ -37,8 +37,8 @@ class NoteRenderer:
         self.cachesize = cachesize * sample.framerate
         self.threshold = int(threshold * sample.framerate)
 
-        self.maxint32 = iinfo(int32).max
-        self.intrange = self.maxint32 - iinfo(int32).min
+        self.maxint64 = iinfo(int64).max
+        self.intrange = iinfo(int32).max - iinfo(int32).min
         self.distance_multiplier = self.intrange / self.threshold * 0
 
         self.notecache = {}
@@ -57,7 +57,7 @@ class NoteRenderer:
             # cutting out
             cutoffs = zeros(self.sample.channels, dtype=int32)
             cutoff_scores = full(self.sample.channels,
-                                 self.maxint32, dtype=int32)
+                                 self.maxint64, dtype=int64)
             if scaled.shape[1] > note.length:
                 note_ending = scaled[note.length:note.length + self.threshold]
                 distance_multiplier = self.distance_multiplier
@@ -65,34 +65,36 @@ class NoteRenderer:
                 start = min(0, note.length - self.threshold)
                 note_ending = scaled[start:]
                 distance_multiplier = -self.distance_multiplier
-            for distance, sample in enumerate(note_ending):
-                for channel, val in enumerate(sample):
+            for channel, audio in enumerate(note_ending):
+                for distance, val in enumerate(audio):
                     score = abs(val) + (distance * distance_multiplier)
                     if score < cutoff_scores[channel]:
                         cutoff_scores[channel] = score
                         cutoffs[channel] = distance
-                    else:
-                        print(score, cutoff_scores[channel])
             print("end", cutoffs)
             cutoffs += note.length
-            
             return scaled, cutoffs
 
     def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
         if self.fullclip:
             # leave a small buffer at the end with space for one more sample
-            output_length = midi.length + int(math.ceil(midi.maxpitch * len(self.sample)))
+            output_length = midi.length + \
+                int(math.ceil(midi.maxpitch * len(self.sample)))
         else:
-            output_length = midi.length + self.threshold  # it has to cut off sounds at the threshold anyway
+            # it has to cut off sounds at the threshold anyway
+            output_length = midi.length + self.threshold
 
         if savetype == FileSaveType.SMART_CACHING:
             #output = CachedWavFile(output_length, filename, self.sample.framerate)
-            raise complain.ComplainToUser("Smart caching will be implemented in the future.")
+            raise complain.ComplainToUser(
+                "Smart caching will be implemented in the future.")
         else:
-            output = wavout.UncachedWavFile(output_length, filename, self.sample.framerate, self.sample.channels)
+            output = wavout.UncachedWavFile(
+                output_length, filename, self.sample.framerate, self.sample.channels)
 
         if pbar:
-            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(
+            ), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
             update = bar.update
             progress = 0
 
@@ -116,14 +118,14 @@ class NoteRenderer:
                     rendered_note = CachedNote(time, *self.render_note(note))
                     notecache[hash(note)] = rendered_note
                 if rendered_note.data.shape[0] != 0:
-                    add_data(time, (rendered_note.data * (note.volume / midi.maxvolume)), rendered_note.cutoffs)
+                    add_data(time, (rendered_note.data * (note.volume /
+                                                          midi.maxvolume)), rendered_note.cutoffs)
 
                 if pbar:
                     # increment progress bar
                     progress += 1
                     update(progress)
 
-            
             if caching:
                 # cache "garbage collection":
                 # if a CachedNote is more than <cachesize> seconds old and not
