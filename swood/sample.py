@@ -1,4 +1,3 @@
-from numpy import int32
 from . import complain
 from PIL import Image
 import numpy as np
@@ -9,12 +8,14 @@ pyfftw.interfaces.cache.enable()
 
 
 class CalculatedFFT:
+
     def __init__(self, avgdata, spacing):
         self.avgdata = avgdata
         self.spacing = spacing
 
 
 class Sample:
+
     def __init__(self, filename, binsize, volume=0.8):
         self.binsize = binsize
 
@@ -27,7 +28,8 @@ class Sample:
 
         self.wav = self.parse_wav(filename)
 
-        max_amplitude = int(max(max(abs(min(chan)), abs(max(chan))) for chan in self.wav))
+        max_amplitude = int(max(max(abs(min(chan)), abs(max(chan)))
+                                for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
 
     def parse_wav(self, filename):
@@ -43,7 +45,7 @@ class Sample:
                 elif self.sampwidth == 2:
                     self.size = np.int16
                 elif self.sampwidth == 3 or self.sampwidth == 4:
-                    self.size = int32
+                    self.size = np.int32
                 else:
                     raise wave.Error
 
@@ -89,7 +91,7 @@ class Sample:
         if not self._img:
             self._img = Image.frombytes("I",
                         (self.length, self.channels),
-                        (self.wav * self.volume).astype(int32).tobytes(),
+                        (self.wav * self.volume).astype(np.int32).tobytes(),
                         "raw", "I", 0, 1)
             # Pillow recommends those last args because of a bug in the raw parser
             # See http://pillow.readthedocs.io/en/3.2.x/reference/Image.html?highlight=%22raw%22#PIL.Image.frombuffer
