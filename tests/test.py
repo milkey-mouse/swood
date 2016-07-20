@@ -55,12 +55,12 @@ def run(midi, *args, play=False, wait=False):
             os.remove(out)
 
 if sys.argv[1] == "playall":
-    run("beethoven", play=True)
     run("dummy", play=True)
+    run("beethoven", play=True)
     run("pitchbend", play=True, wait=True)
 elif sys.argv[1] == "all":
-    run("beethoven")
     run("dummy")
+    run("beethoven")
     run("pitchbend")
 elif sys.argv[1] == "bend":
     run("pitchbend")
