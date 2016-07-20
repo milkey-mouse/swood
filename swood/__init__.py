@@ -42,12 +42,12 @@ def run_cmd(argv=sys.argv):
                         help="FFT bin size; lower numbers make it faster but more off-pitch")
     parser.add_argument("--fullclip", "-f", action="store_true",
                         help="always use the full sample without cropping")
-    parser.add_argument("--no-pbar", "-p",
-                        action="store_false", help=argparse.SUPPRESS)
+    parser.add_argument("--no-pbar", "-p", action="store_false",
+                        help=argparse.SUPPRESS)
 
     if swoodlive_installed():
-        parser.add_argument(
-            "--live", help="listen on a midi input and generate the output in realtime")
+        parser.add_argument("--live",
+                            help="listen on a midi input and generate the output in realtime")
 
     parser.add_argument("--optout", "-o", action="store_true",
                         help="opt out of automatic bug reporting (or set the env variable SWOOD_OPTOUT)")
@@ -60,10 +60,10 @@ def run_cmd(argv=sys.argv):
 
     with complain.ComplaintFormatter():
         sample = sample.Sample(args.sample, args.binsize)
-        midi = midiparse.MIDIParser(args.midi, sample, args.transpose, args.speed)
+        midi = midiparse.MIDIParser(
+            args.midi, sample, args.transpose, args.speed)
         renderer = renderer.NoteRenderer(sample, args.fullclip, args.cachesize)
         renderer.render(midi, args.output, pbar=args.no_pbar)
-
 
 
 if __name__ == "__main__":
