@@ -54,7 +54,7 @@ class NoteRenderer:
             return scaled[note.samplestart:note.samplestart + note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
 
         # cache variables for faster lookups
-        # https://stackoverflow.com/q/37202463
+        # see https://stackoverflow.com/q/37202463
         length = note.length
         channels = self.sample.channels
 
