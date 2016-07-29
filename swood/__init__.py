@@ -56,14 +56,15 @@ def run_cmd(argv=sys.argv):
 
     args = parser.parse_args(argv)
 
-    from . import complain, midiparse, renderer, sample
+    from . import complain, midiparse, render, sample
 
     with complain.ComplaintFormatter():
         sample = sample.Sample(args.sample, args.binsize)
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
-        renderer = renderer.NoteRenderer(sample, args.fullclip, args.cachesize)
-        renderer.render(midi, args.output, pbar=args.no_pbar)
+        renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
+        renderer.render(midi, args.output, pbar=args.no_pbar,
+                        savetype=renderer.FileSaveType.SMART_CACHING)
 
 
 if __name__ == "__main__":

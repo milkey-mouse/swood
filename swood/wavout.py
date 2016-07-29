@@ -25,7 +25,6 @@ class UncachedWavFile:  # basic huge array to file
             # as IOError instead of wave.Error
             with (open(self.filename, "wb") if isinstance(self.filename, str) else self.filename) as wavfile:
                 with wave.open(wavfile, "w") as wav:
-                    nframes = len(data) // (self._sampwidth * self._nchannels)
                     wav.setparams((self.channels.shape[0],  # channels
                                    self.channels.dtype.itemsize,  # sample width
                                    self.framerate,  # sample rate

@@ -90,9 +90,8 @@ class NoteRenderer:
             output_length = midi.length + self.threshold
 
         if savetype == FileSaveType.SMART_CACHING:
-            #output = CachedWavFile(output_length, filename, self.sample.framerate)
-            raise complain.ComplainToUser(
-                "Smart caching will be implemented in the future.")
+            output = wavout.CachedWavFile(
+                output_length, filename, self.sample.framerate, self.sample.channels)
         else:
             output = wavout.UncachedWavFile(
                 output_length, filename, self.sample.framerate, self.sample.channels)
