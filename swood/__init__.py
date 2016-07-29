@@ -64,7 +64,7 @@ def run_cmd(argv=sys.argv):
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
         renderer.render(midi, args.output, pbar=args.no_pbar,
-                        savetype=renderer.FileSaveType.SMART_CACHING)
+                        savetype=render.FileSaveType.SMART_CACHING)
 
 
 if __name__ == "__main__":
