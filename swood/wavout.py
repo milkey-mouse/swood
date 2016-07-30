@@ -47,7 +47,7 @@ class defaultdictkey(defaultdict):
 
 class CachedWavFile:
 
-    def __init__(self, length, filename, framerate, channels=1, chunksize=65536, dtype=int32):
+    def __init__(self, length, filename, framerate, channels=1, chunksize=8192, dtype=int32):
         # 65536 chunk size holds ~1/3 second at 192khz
         # and ~1.5 seconds at 44.1khz (cd quality)
         self.framerate = framerate
@@ -108,25 +108,27 @@ class CachedWavFile:
         chunk_offset = (start % chunksize)
         chunk_start = start // chunksize
         for chan in range(self.channels):
-            chandata = data[chan]
+            cutoffs[chan] = min(cutoffs[chan], len(data[chan]))
             if cutoffs[chan] + chunk_offset <= chunksize:
                 self.chunks[chunk_start][chan][chunk_offset:chunk_offset + cutoffs[chan]] = \
-                    chandata[:cutoffs[chan]]
+                    data[chan][:cutoffs[chan]]
             else:
                 self.chunks[chunk_start][chan][chunk_offset:] = \
-                    chandata[:chunksize - chunk_offset]
+                    data[chan][:chunksize - chunk_offset]
                 bytes_remaining = cutoffs[chan] - chunksize + chunk_offset
                 chunk_start += 1
                 while bytes_remaining >= chunksize:
                     self.chunks[chunk_start][chan] = \
-                        chandata[-bytes_remaining:-bytes_remaining + chunksize]
+                        data[chan][-bytes_remaining:-
+                                   bytes_remaining + chunksize]
                     chunk_start += 1
                     bytes_remaining -= chunksize
                 self.chunks[chunk_start][chan][:bytes_remaining] = \
-                    chandata[-bytes_remaining:]
+                    data[chan][-bytes_remaining:]
 
     def save(self):
         self.flush_cache()
+        print("disk", self.saved_to_disk)
         self.wav._datawritten = (
             max(self.saved_to_disk) + 1) * self.chunkspacing
         self.wav._patchheader()
