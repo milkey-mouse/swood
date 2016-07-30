@@ -1,4 +1,5 @@
-from numpy import zeros, int32, fromfile
+from numpy import zeros, int32, fromfile, dtype
+from numpy import dtype as dtype_info
 from . import complain
 
 from collections import defaultdict
@@ -40,7 +41,7 @@ class defaultdictkey(defaultdict):
     """Variation of collections.defaultdict that passes the key into the factory."""
 
     def __missing__(self, key):
-        self[key] = self.default_factory(self, key)
+        self[key] = self.default_factory(key)
         return self[key]
 
 
@@ -50,11 +51,12 @@ class CachedWavFile:
         # 65536 chunk size holds ~1/3 second at 192khz
         # and ~1.5 seconds at 44.1khz (cd quality)
         self.framerate = framerate
-        self.dtype = dtype
         self.channels = channels
         self.chunksize = chunksize
 
-        self.chunkspacing = self.channels * self.chunksize * self.dtype.itemsize
+        self.dtype = dtype
+        self.itemsize = dtype_info(self.dtype).itemsize
+        self.chunkspacing = self.channels * self.chunksize * self.itemsize
 
         self.saved_to_disk = set()
         self.chunks = defaultdictkey(self.create_chunk)
@@ -64,13 +66,13 @@ class CachedWavFile:
             self._auto_close = true
         else:
             self.wavfile = filename
-            self._auto_close = false
+            self._auto_close = False
 
         self.wav = wave.Wave_write(self)
         self.wav.initfp(self.wavfile)
-        wav.setparams((channels, self.dtype.itemsize,
-                       self.framerate, 0, "NONE", "not compressed"))
-        wav._write_header(0)  # start at 0 length and patch header later
+        self.wav.setparams((channels, self.itemsize, self.framerate,
+                            0, "NONE", "not compressed"))
+        self.wav._write_header(0)  # start at 0 length and patch header later
         self._header_length = self.wavfile.tell()
 
     def create_chunk(self, key):
@@ -85,6 +87,7 @@ class CachedWavFile:
         return fromfile(self.wavfile, dtype=self.dtype, count=self.chunkspacing).reshape((self.channels, self.chunksize), order="F")
 
     def save_chunk(self, idx):
+        print("saving", idx)
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
         self.chunks[idx].flatten(order="F").tofile(self.wavfile)
         self.saved_to_disk.add(idx)
@@ -93,12 +96,12 @@ class CachedWavFile:
     def flush_cache(self, to_idx=None):
         # we should still sort the keys even though it's theoretically not needed
         # because sequential disk writes are faster on both SSDs and hard disks
-        for idx in sorteddict.keys():
+        for idx in sorted(self.chunks.keys()):
             if to_idx is not None and idx <= to_idx:
                 break
             else:
                 self.save_chunk(idx)
-        dict.clear()
+        self.chunks.clear()
 
     def add_data(self, start, data, cutoffs):
         chunksize = self.chunksize
@@ -118,12 +121,14 @@ class CachedWavFile:
                     self.chunks[chunk_start][chan] = \
                         chandata[-bytes_remaining:-bytes_remaining + chunksize]
                     chunk_start += 1
+                    bytes_remaining -= chunksize
                 self.chunks[chunk_start][chan][:bytes_remaining] = \
                     chandata[-bytes_remaining:]
 
     def save(self):
         self.flush_cache()
-        self.wav._datawritten = max(self.saved_to_disk)
+        self.wav._datawritten = (
+            max(self.saved_to_disk) + 1) * self.chunkspacing
         self.wav._patchheader()
         if self._auto_close:
             self.wavfile.close()
