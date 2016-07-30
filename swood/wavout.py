@@ -47,7 +47,7 @@ class defaultdictkey(defaultdict):
 
 class CachedWavFile:
 
-    def __init__(self, length, filename, framerate, channels=1, chunksize=8192, dtype=int32):
+    def __init__(self, length, filename, framerate, channels=1, chunksize=2048, dtype=int32):
         # 65536 chunk size holds ~1/3 second at 192khz
         # and ~1.5 seconds at 44.1khz (cd quality)
         self.framerate = framerate
@@ -110,29 +110,29 @@ class CachedWavFile:
         for chan in range(self.channels):
             cutoffs[chan] = min(cutoffs[chan], len(data[chan]))
             if cutoffs[chan] + chunk_offset <= chunksize:
-                print("Simple chunk write")
-                print("Wrote chunk {} at slice [{}:{}]".format(
-                    chunk_start, chunk_offset, chunk_offset + cutoffs[chan]))
+                print("Simple chunk write of {} bytes".format(cutoffs[chan]))
+                print("Wrote chunk {} at slice [:{}]".format(
+                    chunk_start, cutoffs[chan]))
                 self.chunks[chunk_start][chan][chunk_offset:chunk_offset + cutoffs[chan]] = \
                     data[chan][:cutoffs[chan]]
             else:
-                print("Long chunk write")
-                print("Wrote starting chunk {} at slice [{}:]".format(
-                    chunk_start, chunk_offset))
+                print("Long chunk write of {} bytes".format(cutoffs[chan]))
+                print("Wrote starting chunk {} at slice [:{}]".format(
+                    chunk_start, chunksize - chunk_offset))
                 self.chunks[chunk_start][chan][chunk_offset:] = \
                     data[chan][:chunksize - chunk_offset]
                 bytes_remaining = cutoffs[chan] - chunksize + chunk_offset
                 chunk_start += 1
                 while bytes_remaining >= chunksize:
-                    print("Wrote starting chunk {} at slice [:]".format(
-                        chunk_start, chunk_offset))
+                    print("Wrote full chunk {} at slice [{}:{}]".format(
+                        chunk_start, len(data[chan]) - bytes_remaining, len(data[chan]) - bytes_remaining + chunksize))
                     self.chunks[chunk_start][chan] = \
                         data[chan][-bytes_remaining:-
                                    bytes_remaining + chunksize]
                     chunk_start += 1
                     bytes_remaining -= chunksize
-                print("Wrote starting chunk {} at slice [:{}]".format(
-                    chunk_start, bytes_remaining))
+                print("Wrote ending chunk {} at slice [{}:]".format(
+                    chunk_start, len(data[chan]) - bytes_remaining))
                 self.chunks[chunk_start][chan][:bytes_remaining] = \
                     data[chan][-bytes_remaining:]
 
