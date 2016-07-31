@@ -125,16 +125,16 @@ class CachedWavFile:
                 chunk_start += 1
                 while bytes_remaining >= chunksize:
                     print("Wrote full chunk {} at slice [{}:{}]".format(
-                        chunk_start, len(data[chan]) - bytes_remaining, len(data[chan]) - bytes_remaining + chunksize))
+                        chunk_start, cutoffs[chan] - bytes_remaining, cutoffs[chan] - bytes_remaining + chunksize))
                     self.chunks[chunk_start][chan] = \
-                        data[chan][-bytes_remaining:-
-                                   bytes_remaining + chunksize]
+                        data[chan][cutoffs[chan] - bytes_remaining:
+                                   cutoffs[chan] - bytes_remaining + chunksize]
                     chunk_start += 1
                     bytes_remaining -= chunksize
-                print("Wrote ending chunk {} at slice [{}:]".format(
-                    chunk_start, len(data[chan]) - bytes_remaining))
+                print("Wrote ending chunk {} at slice [{}:{}]".format(
+                    chunk_start, cutoffs[chan] - bytes_remaining, cutoffs[chan]))
                 self.chunks[chunk_start][chan][:bytes_remaining] = \
-                    data[chan][-bytes_remaining:]
+                    data[chan][cutoffs[chan] - bytes_remaining:cutoffs[chan]]
 
     def save(self):
         self.flush_cache()
