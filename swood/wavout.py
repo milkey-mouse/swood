@@ -117,8 +117,8 @@ class CachedWavFile:
                     data[chan][:cutoffs[chan]]
             else:
                 print("Long chunk write of {} bytes".format(cutoffs[chan]))
-                print("Wrote starting chunk {} at slice [:{}]".format(
-                    chunk_start, chunksize - chunk_offset))
+                print("chunks[{}][{}:] += data[:{}] (starting)".format(
+                    chunk_start, chunk_offset, chunksize - chunk_offset))
                 self.chunks[chunk_start][chan][chunk_offset:] = \
                     data[chan][:chunksize - chunk_offset]
                 bytes_remaining = cutoffs[chan] - chunksize + chunk_offset
