@@ -47,9 +47,9 @@ class defaultdictkey(defaultdict):
 
 class CachedWavFile:
 
-    def __init__(self, length, filename, framerate, channels=1, chunksize=2048, dtype=int32):
-        # 65536 chunk size holds ~1/3 second at 192khz
-        # and ~1.5 seconds at 44.1khz (cd quality)
+    def __init__(self, length, filename, framerate, channels=1, chunksize=32768, dtype=int32):
+        # 32768 chunk size holds ~1/6 second at 192khz
+        # and ~0.75 seconds at 44.1khz (cd quality)
         self.framerate = framerate
         self.channels = channels
         self.chunksize = chunksize
@@ -87,7 +87,6 @@ class CachedWavFile:
         return fromfile(self.wavfile, dtype=self.dtype, count=self.chunkspacing).reshape((self.channels, self.chunksize), order="F")
 
     def save_chunk(self, idx):
-        print("saving", idx)
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
         self.chunks[idx].flatten(order="F").tofile(self.wavfile)
         self.saved_to_disk.add(idx)
@@ -106,50 +105,50 @@ class CachedWavFile:
     def add_data(self, start, data, cutoffs):
         data = data.astype(self.dtype)
         chunksize = self.chunksize
-        chunk_offset = (start % chunksize)
         chunk_start = start // chunksize
+        chunk_offset = start - (chunk_start * chunksize)
         for chan in range(self.channels):
-            cutoffs[chan] = min(cutoffs[chan], len(data[chan]))
-            if cutoffs[chan] + chunk_offset <= chunksize:
+            current_chunk = chunk_start
+            cutoff = min(cutoffs[chan], len(data[chan]))
+            print("start:", start, "length:", cutoff)
+            if cutoff + chunk_offset <= chunksize:
                 print("chunks[{}][{}:{}] += data[:{}] (short)".format(
-                    chunk_start,
+                    current_chunk,
                     chunk_offset,
-                    chunk_offset + cutoffs[chan],
-                    cutoffs[chan]
+                    chunk_offset + cutoff,
+                    cutoff
                 ))
-                self.chunks[chunk_start][chan][chunk_offset:chunk_offset + cutoffs[chan]] += \
-                    data[chan][:cutoffs[chan]]
+                self.chunks[current_chunk][chan][chunk_offset:chunk_offset + cutoff] += \
+                    data[chan][:cutoff]
             else:
-                print("Long chunk write of {} bytes".format(cutoffs[chan]))
                 print("chunks[{}][{}:] += data[:{}] (start)".format(
-                    chunk_start,
+                    current_chunk,
                     chunk_offset,
                     chunksize - chunk_offset))
-                self.chunks[chunk_start][chan][chunk_offset:] += \
+                self.chunks[current_chunk][chan][chunk_offset:] += \
                     data[chan][:chunksize - chunk_offset]
-                bytes_remaining = cutoffs[chan] - chunksize + chunk_offset
-                chunk_start += 1
+                bytes_remaining = cutoff - chunksize + chunk_offset
+                current_chunk += 1
                 while bytes_remaining >= chunksize:
                     print("chunks[{}] += data[{}:{}] (full)".format(
-                        chunk_start,
-                        cutoffs[chan] - bytes_remaining,
-                        cutoffs[chan] - bytes_remaining + chunksize))
-                    self.chunks[chunk_start][chan] += \
-                        data[chan][cutoffs[chan] - bytes_remaining:
-                                   cutoffs[chan] - bytes_remaining + chunksize]
-                    chunk_start += 1
+                        current_chunk,
+                        cutoff - bytes_remaining,
+                        cutoff - bytes_remaining + chunksize))
+                    self.chunks[current_chunk][chan] += \
+                        data[chan][cutoff - bytes_remaining:
+                                   cutoff - bytes_remaining + chunksize]
+                    current_chunk += 1
                     bytes_remaining -= chunksize
                 print("chunks[{}][:{}] += data[{}:{}] (end)".format(
-                    chunk_start,
+                    current_chunk,
                     bytes_remaining,
-                    cutoffs[chan] - bytes_remaining,
-                    cutoffs[chan]))
-                self.chunks[chunk_start][chan][:bytes_remaining] += \
-                    data[chan][cutoffs[chan] - bytes_remaining:cutoffs[chan]]
+                    cutoff - bytes_remaining,
+                    cutoff))
+                self.chunks[current_chunk][chan][:bytes_remaining] += \
+                    data[chan][cutoff - bytes_remaining:cutoff]
 
     def save(self):
         self.flush_cache()
-        print("disk", self.saved_to_disk)
         self.wav._datawritten = (
             max(self.saved_to_disk) + 1) * self.chunkspacing
         self.wav._patchheader()
