@@ -56,7 +56,7 @@ class defaultdictkey(defaultdict):
 
 
 class CachedWavFile:
-
+    """Uses chunks of data to efficiently write a WAV file to disk without storing a large array."""
     def __init__(self, length, filename, framerate, channels=1, chunksize=32768, dtype=int32):
         # 32768 chunk size holds ~1/6 second at 192khz
         # and ~0.75 seconds at 44.1khz (cd quality)
@@ -117,6 +117,13 @@ class CachedWavFile:
                 self.save_chunk(idx)
 
     def add_data(self, start, data, cutoffs):
+        """Add sound data at a specified position.
+        
+        Args:
+            start: How many samples into the output the data should start
+            data: A NumPy array of data to add to the output.
+            cutoffs: An array of integers that specifies where to cut off each channel. (optional)
+        """
         data = data.astype(self.dtype)
         chunksize = self.chunksize
         chunk_start = start // chunksize
@@ -143,6 +150,7 @@ class CachedWavFile:
         self.flush_cache(chunk_start)
 
     def save(self):
+        """Flush the cache of chunks to disk, patch the WAV header with the new length, and close the file."""
         self.flush_cache()
         self.wav._datawritten = (
             max(self.saved_to_disk) + 1) * self.chunkspacing
