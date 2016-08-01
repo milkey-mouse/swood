@@ -1,4 +1,4 @@
-"""Renders a WAV file by pitch bending samples according to a MIDI."""
+"""Renders music by pitch bending samples according to a MIDI."""
 
 from enum import Enum
 import math
@@ -11,7 +11,7 @@ from . import wavout
 
 
 class CachedNote:
-
+    """Holds pre-rendered versions of notes, tracking # of uses."""
     def __init__(self, length, rendered, cutoffs):
         self.used = 1
         self.length = length
@@ -60,11 +60,15 @@ class NoteRenderer:
                                   resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
-        """Render a single note into an array."""
+        """Render a single note and return an array (with optional cutoffs)."""
         scaled = self.zoom(self.sample.img,
                            self.sample.fundamental_freq / note.pitch)
+
+        if note.fullclip:
+            return scaled, full(self.sample.channels, scaled.shape[1], dtype=int32)
         if note.bend:
-            return scaled[note.samplestart:note.samplestart + note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
+            raise NotImplementedError
+            #return scaled[note.samplestart:note.samplestart + note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
 
         # cache variables for faster lookups
         # see https://stackoverflow.com/q/37202463
@@ -93,7 +97,23 @@ class NoteRenderer:
         cutoffs += length
         return scaled, cutoffs
 
-    def render(self, midi, filename, pbar=True, savetype=FileSaveType.ARRAY_TO_DISK, clear_cache=True):
+    def render(self, midi, filename=None, pbar=False, savetype=FileSaveType.SMART_CACHING, clear_cache=True):
+        """Renders from a MIDIParser to an array or WAV file using Samples.
+        
+        Args:
+            midi: The (pre-parsed) MIDI file to render.
+            filename: A file or file path to save the WAV file to. Not needed with
+            FileSaveType.ARRAY_IN_MEM. 
+            pbar: Show a progress bar on STDOUT while rendering. Defaults to False.
+            savetype: The FileSaveType to use when writing the sound data. Defaults
+            to FileSaveType.SMART_CACHING.
+            clear_cache: Remove all notes from the temporary cache after rendering
+            the MIDI. It's recommended to disable this if you're rendering many MIDIs
+            and have memory to spare.Defaults to True.
+        """
+
+        if savetype != FileSaveType.ARRAY_IN_MEM and filename is None:
+            return ValueError("When not outputting to an array in memory, you need to specify a filename.")
         if self.fullclip:
             # leave a small buffer at the end with space for one more sample
             output_length = midi.length + \

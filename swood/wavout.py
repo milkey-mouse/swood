@@ -1,4 +1,4 @@
-from numpy import zeros, int32, fromfile, dtype
+from numpy import zeros, int32, fromfile, dtype, full
 from numpy import dtype as dtype_info
 from . import complain
 
@@ -6,14 +6,23 @@ from collections import defaultdict
 import wave
 
 
-class UncachedWavFile:  # basic huge array to file
-
+class UncachedWavFile:
+    """Creates a single large array for the output and writes it to disk at the end."""
     def __init__(self, length, filename, framerate, channels=1, dtype=int32):
         self.channels = zeros((channels, length), dtype=dtype)
         self.framerate = framerate
         self.filename = filename
 
-    def add_data(self, start, data, cutoffs):
+    def add_data(self, start, data, cutoffs=None):
+        """Add sound data at a specified position.
+        
+        Args:
+            start: How many samples into the output the data should start
+            data: A NumPy array of data to add to the output.
+            cutoffs: An array of integers that specifies where to cut off each channel. (optional)
+        """
+        if cutoffs is None:
+            cutoffs = full(self.channels.shape[0], scaled.shape[1], dtype=int32)
         for chan in range(self.channels.shape[0]):
             length = min(self.channels.shape[
                          1] - start, data.shape[1], cutoffs[chan])
@@ -21,6 +30,7 @@ class UncachedWavFile:  # basic huge array to file
                 start:start + length] += data[chan][:length].astype(self.channels.dtype)
 
     def save(self):
+        """Write the output array to the file."""
         try:
             # open the file manually to catch I/O exceptions
             # as IOError instead of wave.Error

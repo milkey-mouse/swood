@@ -8,14 +8,14 @@ pyfftw.interfaces.cache.enable()
 
 
 class CalculatedFFT:
-
+    """Stores data about FFTs calculated in a Sample."""
     def __init__(self, avgdata, spacing):
         self.avgdata = avgdata
         self.spacing = spacing
 
 
 class Sample:
-
+    """Reads and analyzes WAV files."""
     def __init__(self, filename, binsize, volume=0.8):
         self.binsize = binsize
 
@@ -33,6 +33,7 @@ class Sample:
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
 
     def parse_wav(self, filename):
+        """Load a WAV file into a NumPy array."""
         try:
             with wave.open(filename, "rb") as wavfile:
                 self.sampwidth = wavfile.getsampwidth()
@@ -62,6 +63,7 @@ class Sample:
 
     @property
     def fft(self):
+        """Run a Fast Fourier Transform on the WAV file to create a histogram of frequencies and amplitudes."""
         if not self._fft:
             if self.binsize % 2 != 0:
                 print("Warning: Bin size must be a multiple of 2, correcting automatically")
@@ -88,6 +90,7 @@ class Sample:
 
     @property
     def img(self):
+        """Generate a PIL image from the WAV file."""
         if not self._img:
             self._img = Image.frombytes("I",
                         (self.length, self.channels),
@@ -99,6 +102,7 @@ class Sample:
 
     @property
     def fundamental_freq(self):
+        """Find the most prominent frequency from the FFT."""
         if not self._fundamental_freq:
             self._fundamental_freq = (np.argmax(self.fft.avgdata[1:]) * self.fft.spacing) + (self.fft.spacing / 2)
         return self._fundamental_freq

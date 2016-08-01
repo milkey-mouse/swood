@@ -63,8 +63,7 @@ def run_cmd(argv=sys.argv):
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
-        renderer.render(midi, args.output, pbar=args.no_pbar,
-                        savetype=render.FileSaveType.SMART_CACHING)
+        renderer.render(midi, args.output, pbar=args.no_pbar)
 
 
 if __name__ == "__main__":
