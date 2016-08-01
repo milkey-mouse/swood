@@ -69,7 +69,9 @@ class CachedWavFile:
             self._auto_close = False
 
         self.wav = wave.Wave_write(self)
+        self.wav.close = lambda: None
         self.wav.initfp(self.wavfile)
+
         self.wav.setparams((channels, self.itemsize, self.framerate,
                             0, "NONE", "not compressed"))
         self.wav._write_header(0)  # start at 0 length and patch header later
@@ -77,14 +79,17 @@ class CachedWavFile:
 
     def create_chunk(self, key):
         if key in self.saved_to_disk:
-            return self.load_chunk(idx)
+            return self.load_chunk(key)
         else:
             return zeros((self.channels, self.chunksize), dtype=self.dtype)
 
     def load_chunk(self, idx):
-        del self.saved_to_disk[idx]
+        raise NotImplementedError  # not needed for linear writes and I'm too lazy
+        self.saved_to_disk.discard(idx)
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
-        return fromfile(self.wavfile, dtype=self.dtype, count=self.chunkspacing).reshape((self.channels, self.chunksize), order="F")
+        raw_data = fromfile(self.wavfile, dtype=self.dtype,
+                            count=self.channels * self.chunksize)
+        return raw_data.reshape((self.channels, self.chunksize), order="F")
 
     def save_chunk(self, idx):
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
@@ -96,11 +101,10 @@ class CachedWavFile:
         # we should still sort the keys even though it's theoretically not needed
         # because sequential disk writes are faster on both SSDs and hard disks
         for idx in sorted(self.chunks.keys()):
-            if to_idx is not None and idx <= to_idx:
+            if to_idx is not None and idx >= to_idx:
                 break
             else:
                 self.save_chunk(idx)
-        self.chunks.clear()
 
     def add_data(self, start, data, cutoffs):
         data = data.astype(self.dtype)
@@ -110,42 +114,23 @@ class CachedWavFile:
         for chan in range(self.channels):
             current_chunk = chunk_start
             cutoff = min(cutoffs[chan], len(data[chan]))
-            print("start:", start, "length:", cutoff)
             if cutoff + chunk_offset <= chunksize:
-                print("chunks[{}][{}:{}] += data[:{}] (short)".format(
-                    current_chunk,
-                    chunk_offset,
-                    chunk_offset + cutoff,
-                    cutoff
-                ))
                 self.chunks[current_chunk][chan][chunk_offset:chunk_offset + cutoff] += \
                     data[chan][:cutoff]
             else:
-                print("chunks[{}][{}:] += data[:{}] (start)".format(
-                    current_chunk,
-                    chunk_offset,
-                    chunksize - chunk_offset))
                 self.chunks[current_chunk][chan][chunk_offset:] += \
                     data[chan][:chunksize - chunk_offset]
                 bytes_remaining = cutoff - chunksize + chunk_offset
                 current_chunk += 1
                 while bytes_remaining >= chunksize:
-                    print("chunks[{}] += data[{}:{}] (full)".format(
-                        current_chunk,
-                        cutoff - bytes_remaining,
-                        cutoff - bytes_remaining + chunksize))
                     self.chunks[current_chunk][chan] += \
                         data[chan][cutoff - bytes_remaining:
                                    cutoff - bytes_remaining + chunksize]
                     current_chunk += 1
                     bytes_remaining -= chunksize
-                print("chunks[{}][:{}] += data[{}:{}] (end)".format(
-                    current_chunk,
-                    bytes_remaining,
-                    cutoff - bytes_remaining,
-                    cutoff))
                 self.chunks[current_chunk][chan][:bytes_remaining] += \
                     data[chan][cutoff - bytes_remaining:cutoff]
+        self.flush_cache(chunk_start)
 
     def save(self):
         self.flush_cache()
