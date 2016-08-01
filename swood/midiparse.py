@@ -1,3 +1,5 @@
+"""Parses MIDI files into a list of notes in chronological order."""
+
 from copy import copy
 import collections
 import operator
@@ -6,11 +8,18 @@ import mido
 
 from . import complain
 
+
 def note_to_freq(notenum):
-        # see https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
-        return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
+    """Converts a MIDI note number to a frequency.
+
+    See https://en.wikipedia.org/wiki/MIDI_Tuning_Standard
+    """
+    return (2.0 ** ((notenum - 69) / 12.0)) * 440.0
+
 
 class Note:
+    """Holds information about each MIDI note."""
+
     def __init__(self, samplestart=0, length=0, volume=127, starttime=0, pitch=0, bend=0):
         self.samplestart = samplestart
         self.starttime = starttime
@@ -29,16 +38,19 @@ class Note:
         return len(self.data)
 
     def __repr__(self):
-        return "Note(length={}, pitch={}, starttime={}, samplestart={}, bend={})".format(self.length, self.pitch, self.starttime, self.samplestart, self.bend)
+        return "Note(length={}, pitch={}, starttime={}, samplestart={}, bend={})".format(
+            self.length, self.pitch, self.starttime, self.samplestart, self.bend)
 
     def finalize(self, time):
-        self.pitch = note_to_freq(self.pitch + self.bend) 
+        self.pitch = note_to_freq(self.pitch + self.bend)
         self.length = time - self.starttime
         return self
 
 
 class MIDIParser:
-    def __init__(self, filename, sample, transpose=0, speed=1):  # TODO: convert the rest of the function to the new notes
+    """Parses a MIDI file into a chronological list of notes."""
+
+    def __init__(self, filename, sample, transpose=0, speed=1):
         playing = collections.defaultdict(list)
         notes = collections.defaultdict(list)
         self.notecount = 0
@@ -59,17 +71,19 @@ class MIDIParser:
                     if message.type == "note_on":
                         playing[message.note].append(
                             Note(starttime=time_samples,
-                            volume=message.velocity,
-                            pitch=message.note+transpose,
-                            bend=bend))
+                                 volume=message.velocity,
+                                 pitch=message.note + transpose,
+                                 bend=bend))
                         volume += message.velocity
                         self.maxvolume = max(volume, self.maxvolume)
-                        self.maxpitch = max(self.maxpitch, message.note + transpose + bend)
+                        self.maxpitch = max(
+                            self.maxpitch, message.note + transpose + bend)
                     elif message.type == "note_off":
                         try:
                             note = playing[message.note].pop()
                         except IndexError:  # the pop will fail if there aren't any matching notes playing
-                            print("Warning: There was a note end event at {} seconds with no matching begin event".format(time))
+                            print(
+                                "Warning: There was a note end event at {} seconds with no matching begin event".format(time))
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
                         note.finalize(time_samples)
@@ -89,21 +103,27 @@ class MIDIParser:
                                     oldnote.bend = True
                                     notes[note.starttime].append(oldnote)
 
-                                    note.samplestart = int(round(oldnote.length / oldnote.pitch))
+                                    note.samplestart = int(
+                                        round(oldnote.length / oldnote.pitch))
                                     note.start = oldnote.length
                                     self.notecount += 1
                                     note.length = None
                                     note.bend = bend
                 if len(playing) != 0:
-                    print("Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
+                    print(
+                        "Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
                     for notelist in playing.values():
                         for note in notelist:
-                            note.length = int(time * sample.framerate) - note.start
+                            note.length = int(
+                                time * sample.framerate) - note.start
                             self.notecount += 1
                 self.notes = sorted(notes.items(), key=operator.itemgetter(0))
-                self.length = max(max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
+                self.length = max(
+                    max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = note_to_freq(self.maxpitch)
         except IOError:
-            raise complain.ComplainToUser("Error opening MIDI file '{}'.".format(filename))
+            raise complain.ComplainToUser(
+                "Error opening MIDI file '{}'.".format(filename))
         except IndexError:
-            raise complain.ComplainToUser("This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
+            raise complain.ComplainToUser(
+                "This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")

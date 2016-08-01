@@ -1,3 +1,5 @@
+"""Renders a WAV file by pitch bending samples according to a MIDI."""
+
 from enum import Enum
 import math
 
@@ -21,12 +23,21 @@ class CachedNote:
 
 
 class FileSaveType(Enum):
+    """Enum for selecting where to render to.
+
+    ARRAY_TO_DISK will create a single array and write the contents out when done.
+    ARRAY_IN_MEM will render to a single array and return the contents.
+    SMART_CACHING will render out to many chunks, flushing them to disk to save memory.
+    It's recommended to use SMART_CACHING (the default from the CLI) over ARRAY_TO_DISK
+    as ARRAY_TO_DISK uses lots of memory on any file longer than a few seconds.
+    """
     ARRAY_TO_DISK = 0
     ARRAY_IN_MEM = 1
     SMART_CACHING = 2
 
 
 class NoteRenderer:
+    """Renders a WAV file from a MIDI by pitch bending the samples."""
 
     def __init__(self, sample, fullclip=False, cachesize=7.5, threshold=0.075):
         if threshold < 0:
@@ -43,11 +54,13 @@ class NoteRenderer:
         self.notecache = {}
 
     def zoom(self, img, multiplier):
+        """Scales the sound clip (in PIL Image form) by the given multiplier."""
         return asarray(img.resize((int(round(img.size[0] * multiplier)),
                                    self.sample.channels),
                                   resample=Image.BICUBIC), dtype=int32)
 
     def render_note(self, note):
+        """Render a single note into an array."""
         scaled = self.zoom(self.sample.img,
                            self.sample.fundamental_freq / note.pitch)
         if note.bend:
