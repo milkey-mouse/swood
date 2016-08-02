@@ -69,7 +69,7 @@ class CachedWavFile:
         self.chunkspacing = self.channels * self.chunksize * self.itemsize
 
         self.saved_to_disk = set()
-        self.chunks = defaultdictkey(self.create_chunk)
+        self.chunks = defaultdictkey(self._create_chunk)
 
         if isinstance(filename, str):
             self.wavfile = open(filename, "wb+")
@@ -87,34 +87,49 @@ class CachedWavFile:
         self.wav._write_header(0)  # start at 0 length and patch header later
         self._header_length = self.wavfile.tell()
 
-    def create_chunk(self, key):
+    def _create_chunk(self, key):
+        """Create a new chunk filled with zeros, or load one from disk."""
         if key in self.saved_to_disk:
-            return self.load_chunk(key)
+            return self._load_chunk(key)
         else:
             return zeros((self.channels, self.chunksize), dtype=self.dtype)
 
-    def load_chunk(self, idx):
-        raise NotImplementedError  # not needed for linear writes and I'm too lazy
+    def _load_chunk(self, idx):
+        """Load a chunk from disk into the cache."""
+        raise NotImplementedError  # not needed for linear writes and it's broken
         self.saved_to_disk.discard(idx)
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
         raw_data = fromfile(self.wavfile, dtype=self.dtype,
                             count=self.channels * self.chunksize)
         return raw_data.reshape((self.channels, self.chunksize), order="F")
 
-    def save_chunk(self, idx):
+    def _save_chunk(self, idx):
+        """Write a chunk to disk and remove it from the cache."""
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
         self.chunks[idx].flatten(order="F").tofile(self.wavfile)
         self.saved_to_disk.add(idx)
         del self.chunks[idx]
 
     def flush_cache(self, to_idx=None):
+        """Save all (or all up to a certain index) chunks in memory to disk and remove them fron the cache."""
         # we should still sort the keys even though it's theoretically not needed
         # because sequential disk writes are faster on both SSDs and hard disks
         for idx in sorted(self.chunks.keys()):
             if to_idx is not None and idx >= to_idx:
                 break
             else:
-                self.save_chunk(idx)
+                self._save_chunk(idx)
+
+    def fill_empty_chunks(self):
+        """Fill all the unwritten chunks with zeros.
+        
+        This isn't strictly necessary, as on POSIX and Windows seek()ing past
+        the end of a file fills the unwritten part with zeros. Unfortunately,
+        doing so is still undefined behavior and should be avoided. This function
+        iterates over the unwritten chunks, filling them with zeros."""
+        for chunk_idx in range(max(self.saved_to_disk)):
+            if chunk_idx not in self.saved_to_disk:
+                self._save_chunk(chunk_idx)  # the chunk won't exist but it will create it full of zeros & save it
 
     def add_data(self, start, data, cutoffs):
         """Add sound data at a specified position.
@@ -152,6 +167,7 @@ class CachedWavFile:
     def save(self):
         """Flush the cache of chunks to disk, patch the WAV header with the new length, and close the file."""
         self.flush_cache()
+        self.fill_empty_chunks()
         self.wav._datawritten = (
             max(self.saved_to_disk) + 1) * self.chunkspacing
         self.wav._patchheader()
