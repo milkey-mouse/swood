@@ -24,3 +24,15 @@ class SoundFont:
             self.parse_zip()
         except zipfile.BadZipFile:
             self.parse_ini()
+
+    def parse_zip(self):
+        """Parses a ZIP of a .swood INI file and its samples without extracting."""
+        try:
+            valid_extensions = {"swood", "ini", "txt"}
+            ini_path = next(fn for fn in self.file.namelist()
+                            if fn.split(".")[-1] in valid_extensions)
+        except StopIteration:
+            raise complain.ComplainToUser(
+                "Couldn't find config file in ZIP. Be sure it ends in .ini, .swood, or .txt.'")
+        config_txt = self.file.read(ini_path)
+        raise NotImplementedError
