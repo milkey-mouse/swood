@@ -1,4 +1,4 @@
-"""Parses .memefont files.
+"""Parses .swood files.
 
 See https://github.com/milkey-mouse/swood/issues/1"""
 
@@ -169,19 +169,19 @@ percussion = [
     (64, "Low Conga"),
     (65, "High Timbale"),
     (66, "Low Timbale"),
-    (67, "High Agogô"),
-    (68, "Low Agogô"),
+    (67, "High Agogô", "High Agogo"),
+    (68, "Low Agogô", "Low Agogo"),
     (69, "Cabasa"),
     (70, "Maracas"),
     (71, "Short Whistle"),
     (72, "Long Whistle"),
-    (73, "Short Güiro"),
-    (74, "Long Güiro"),
+    (73, "Short Güiro", "Short Guiro"),
+    (74, "Long Güiro", "Long Guiro"),
     (75, "Claves"),
     (76, "High Wood Block"),
     (77, "Low Wood Block"),
-    (78, "Mute Cuíca"),
-    (79, "Open Cuíca"),
+    (78, "Mute Cuíca", "Mute Cuica"),
+    (79, "Open Cuíca", "Open Cuica"),
     (80, "Mute Triangle"),
     (81, "Open Triangle")
 ]

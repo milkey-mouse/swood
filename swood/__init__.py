@@ -56,7 +56,7 @@ def run_cmd(argv=sys.argv):
 
     args = parser.parse_args(argv)
 
-    from . import complain, midiparse, render, sample
+    from . import complain, midiparse, render, sample, soundfont
 
     with complain.ComplaintFormatter():
         sample = sample.Sample(args.sample, args.binsize)
