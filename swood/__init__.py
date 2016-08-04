@@ -1,17 +1,20 @@
-import pkg_resources
 import argparse
 import mido
 import sys
 
 
 def version_info():
-    versions = []
-    for pkg in ("swood", "pillow-simd", "pillow", "PIL", "pyFFTW", "mido"):
-        try:
-            versions.append(str(pkg_resources.get_distribution(pkg)))
-        except pkg_resources.DistributionNotFound:
-            pass
-    return " ".join(versions)
+    try:
+        import pkg_resources
+        versions = []
+        for pkg in ("swood", "pillow-simd", "pillow", "PIL", "pyFFTW", "mido"):
+            try:
+                versions.append(str(pkg_resources.get_distribution(pkg)))
+            except pkg_resources.DistributionNotFound:
+                pass
+        return " ".join(versions)
+    except:
+        return "???"
 
 
 def swoodlive_installed():
