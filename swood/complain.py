@@ -24,7 +24,7 @@ class ComplaintFormatter(object):
         pass
 
     def __exit__(self, exc_type, exc, tb):
-        if exc_type == ComplainToUser:
+        if isinstance(exc, ComplainToUser):
             print("Error: {}".format(exc))
             sys.exit(1)
         elif isinstance(exc, Exception):
