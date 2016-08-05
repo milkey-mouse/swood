@@ -2,11 +2,17 @@
 
 # See https://github.com/milkey-mouse/swood/issues/1
 
+from os.path import normpath, abspath, dirname, join
 from collections import defaultdict
-from . import complain, sample
+from .sample import Sample
 from .instruments import *
+from . import complain
 import zipfile
 import string
+
+# user-friendly repr for zip-loaded samples
+zipfile.ZipExtFile.__repr__ = (
+    lambda self: "<zipped WAV file '{}'>".format(self.name))
 
 
 class SoundFontSyntaxError(complain.ComplainToUser, SyntaxError):
@@ -41,16 +47,17 @@ class SoundFont:
         self.load_instruments()
         self.channels = {}
         self.options = {}
+        self.samples = set()
 
         if isinstance(filename, str):
             self.file = open(filename)
         else:
             self.file = filename
 
-        try:
+        if zipfile.is_zipfile(self.file):
             self.file = zipfile.ZipFile(self.file)
             self.load_zip()
-        except zipfile.BadZipFile:
+        else:
             self.load_ini()
 
         self.load_samples()
@@ -61,6 +68,8 @@ class SoundFont:
             new_instrument = Instrument()
             for name in names:
                 self.instruments[name].add(new_instrument)
+            self.instruments["default"].add(new_instrument)
+            self.instruments["all"].add(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
         # denoted by the note number (with valid #s ranging 35-81).
@@ -69,6 +78,8 @@ class SoundFont:
             self.instruments["p" + str(idx)].add(new_instrument)
             for name in names:
                 self.instruments[name].add(new_instrument)
+            self.instruments["default"].add(new_instrument)
+            self.instruments["all"].add(new_instrument)
 
     def load_ini(self):
         self.file.seek(0)
@@ -106,20 +117,52 @@ class SoundFont:
                 name = parts[0].strip()
                 if name in ("file", "sample"):
                     for instrument in affected_instruments:
-                        instrument.sample = parts[1]
+                        if parts[1].lower() not in ("", "none", "null"):
+                            instrument.sample = parts[1]
+                            self.samples.add(parts[1])
                 elif name in ("volume", "vol"):
                     for instrument in affected_instruments:
-                        instrument.volume = int(parts[1])
+                        if parts[1] != "0":
+                            try:
+                                instrument.volume = int(parts[1])
+                            except ValueError:
+                                raise SoundFontSyntaxError(
+                                    linenum, raw_text, "'{}' is not a valid number".format(parts[1]))
                 elif name == "pan":
                     for instrument in affected_instruments:
+                        try:
+                            pan = float(parts[1])
+                        except ValueError:
+                            raise SoundFontSyntaxError(
+                                linenum, raw_text, "'{}' is not a valid number".format(parts[1]))
+                            if pan < 0 or pan > 1:
+                                raise SoundFontSyntaxError(
+                                    linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range".format(parts[1]))
+                            else:
+                                instrument.pan = pan
                         instrument.pan = float(parts[1])
                 else:
                     raise SoundFontSyntaxError(
-                        linenum, raw_text, "\n'{}' is not a valid property".format(name))
+                        linenum, raw_text, "'{}' is not a valid property".format(name))
+
+    def wavpath(self, relpath):
+        # only works on non-zip files
+        return normpath(join(dirname(abspath(self.file.name)), relpath))
 
     def load_samples(self):
+        loaded_samples = {fn: Sample(self.wavpath(fn)) for fn in self.samples}
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
-                    instrument.sample = sample.Sample(
-                        instrument.sample, volume=instrument.volume / 100)
+                    instrument.sample = loaded_samples[instrument.sample]
+
+    def load_samples_from_zip(self):
+        loaded_samples = {}
+        for fn in self.samples:
+            filepath = normpath(join(dirname(abspath(self.file.fp.name)), fn))
+            with self.file.open(filepath) as zipped_wav:
+                loaded_samples[fn] = Sample(zipped_wav)
+        for instruments in self.instruments.values():
+            for instrument in instruments:
+                if isinstance(instrument.sample, str):
+                    instrument.sample = loaded_samples[instrument.sample]
