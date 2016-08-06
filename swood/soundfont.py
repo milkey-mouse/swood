@@ -4,6 +4,8 @@
 
 from os.path import normpath, abspath, dirname, join
 from collections import defaultdict
+from enum import Enum
+
 from .sample import Sample
 from .instruments import *
 from . import complain
@@ -43,11 +45,11 @@ class Instrument:
 class SoundFont:
     """Parses and holds information about .swood files."""
 
-    def __init__(self, filename):
+    def __init__(self, filename, arguments):
+        self.arguments = arguments
         self.load_instruments()
-        self.channels = {}
-        self.options = {}
         self.samples = set()
+        self.channels = {}
 
         if isinstance(filename, str):
             self.file = open(filename)
@@ -61,24 +63,24 @@ class SoundFont:
             self.load_ini()
 
         self.load_samples()
+        self.split_instruments()
 
     def load_instruments(self):
         self.instruments = defaultdict(set)
+        self.percussion = defaultdict(set)
         for names in instruments:
             new_instrument = Instrument()
             for name in names:
-                self.instruments[name].add(new_instrument)
-            self.instruments["default"].add(new_instrument)
+                self.instruments[name.lower()].add(new_instrument)
             self.instruments["all"].add(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
         # denoted by the note number (with valid #s ranging 35-81).
         for idx, *names in percussion:
             new_instrument = Instrument()
-            self.instruments["p" + str(idx)].add(new_instrument)
+            self.percussion[idx].add(new_instrument)
             for name in names:
-                self.instruments[name].add(new_instrument)
-            self.instruments["default"].add(new_instrument)
+                self.percussion[name.lower()].add(new_instrument)
             self.instruments["all"].add(new_instrument)
 
     def load_ini(self):
@@ -106,41 +108,79 @@ class SoundFont:
 
     def parse(self, config):
         affected_instruments = []
+        parse_arguments = None
         for linenum, raw_text in enumerate(config.replace("\r\n", "\n").split("\n")):
             text = self.strip_comments(raw_text)
             if text == "":
                 continue
             elif text.startswith("[") and text.endswith("]"):
-                affected_instruments = self.instruments[text[1:-1]]
+                header_name = text[1:-1].lower()
+                if header_name in ("default", "all"):
+                    affected_instruments = self.instruments["all"]
+                elif header_name in self.instruments:
+                    affected_instruments = self.instruments[header_name]
+                elif header_name in self.percussion:
+                    affected_instruments = self.percussion[header_name]
+                elif len(header_name) == 3 and header_name.startswith("p"):
+                    try:
+                        affected_instruments = percussion[int(header_name[1:])]
+                    except ValueError, KeyError:
+                        raise SoundFontSyntaxError(
+                            linenum, raw_text, "Header not recognized.")
+                else:
+                    raise SoundFontSyntaxError(
+                        linenum, raw_text, "Header not recognized.")
             elif "=" in text:
                 parts = text.split("=")
                 name = parts[0].strip()
-                if name in ("file", "sample"):
+                value = parts[1]
+                if parse_arguments is None:
+                    raise SoundFontSyntaxError(
+                        linenum, raw_text,
+                        "No header specified. For defaults, specify '[default]' on the line before."
+                    )
+                elif parse_arguments:
+                    possible_args = {
+                        "transpose": int,
+                        "speed": float,
+                        "cachesize": float,
+                        "binsize": int,
+                        "fullclip": bool,
+                    }
+                    if name in possible_args:
+                        try:
+                            setattr(self.arguments, name,
+                                    possible_args[name](value))
+                        except ValueError:
+                            raise SoundFontSyntaxError(
+                                linenum, raw_text, "'{}' is not a valid value for '{}'".format(value, name))
+                elif name in ("file", "sample"):
                     for instrument in affected_instruments:
-                        if parts[1].lower() not in ("", "none", "null"):
-                            instrument.sample = parts[1]
-                            self.samples.add(parts[1])
+                        if value.lower() in ("", "none", "null"):
+                            instrument.sample = None
+                        else:
+                            instrument.sample = value
+                            self.samples.add(value)
                 elif name in ("volume", "vol"):
                     for instrument in affected_instruments:
-                        if parts[1] != "0":
-                            try:
-                                instrument.volume = int(parts[1])
-                            except ValueError:
-                                raise SoundFontSyntaxError(
-                                    linenum, raw_text, "'{}' is not a valid number".format(parts[1]))
+                        try:
+                            instrument.volume = int(value)
+                        except ValueError:
+                            raise SoundFontSyntaxError(
+                                linenum, raw_text, "'{}' is not a valid number".format(value))
                 elif name == "pan":
                     for instrument in affected_instruments:
                         try:
-                            pan = float(parts[1])
+                            pan = float(value)
                         except ValueError:
                             raise SoundFontSyntaxError(
-                                linenum, raw_text, "'{}' is not a valid number".format(parts[1]))
+                                linenum, raw_text, "'{}' is not a valid number".format(value))
                             if pan < 0 or pan > 1:
                                 raise SoundFontSyntaxError(
-                                    linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range".format(parts[1]))
+                                    linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range".format(value))
                             else:
                                 instrument.pan = pan
-                        instrument.pan = float(parts[1])
+                        instrument.pan = float(value)
                 else:
                     raise SoundFontSyntaxError(
                         linenum, raw_text, "'{}' is not a valid property".format(name))

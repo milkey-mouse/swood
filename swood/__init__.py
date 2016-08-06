@@ -22,19 +22,25 @@ def swoodlive_installed():
     return importlib.util.find_spec("swoodlive") is not None
 
 
+def is_wav(f):
+    riff = f.read(4) == b"RIFF"
+    f.read(4)
+    wave = f.read(4) == b"WAVE"
+    f.seek(0)
+    return riff and wave
+
+
 def run_cmd(argv=sys.argv):
     parser = argparse.ArgumentParser(
         description="swood.exe: the automatic ytpmv generator", formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument("sample", type=argparse.FileType(
-        "rb"), help="a short wav file to sample as the instrument")
+    parser.add_argument("infile", type=argparse.FileType("rb"),
+                        help="a short wav file to sample as the instrument, or a swood config file")
     parser.add_argument("midi", type=mido.MidiFile,
                         help="the MIDI to play with the wav sample")
-    parser.add_argument("output", type=argparse.FileType(
-        "wb"), help="path for the output wav file")
+    parser.add_argument("output", type=argparse.FileType("wb"),
+                        help="path for the output wav file")
 
-    parser.add_argument("--config", "--cfg", type=argparse.FileType("r"),
-                        help="the config file (see https://meme.institute/swood/config)")
     parser.add_argument("--transpose", "-t", type=int,
                         default=0, help="amount to transpose (semitones)")
     parser.add_argument("--speed", "-s", type=float,
@@ -62,7 +68,7 @@ def run_cmd(argv=sys.argv):
     from . import complain, midiparse, render, sample, soundfont
 
     with complain.ComplaintFormatter():
-        sample = sample.Sample(args.sample, args.binsize)
+        sample = sample.Sample(args.infile, args.binsize)
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
