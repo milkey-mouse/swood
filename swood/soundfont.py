@@ -6,6 +6,7 @@ from os.path import normpath, abspath, dirname, join
 from collections import defaultdict
 from enum import Enum
 
+from PIL.Image import BILINEAR
 from .sample import Sample
 from .instruments import *
 from . import complain
@@ -26,7 +27,7 @@ class SoundFontSyntaxError(complain.ComplainToUser, SyntaxError):
         self.error_desc = error_desc
 
     def __str__(self):
-        return "Syntax error on line {}:\n".format(self.line) + \
+        return "Syntax error on line {}:\n".format(self.line + 1) + \
                self.line_text + "\n" + self.error_desc
 
 
@@ -59,11 +60,10 @@ class SoundFont:
         if zipfile.is_zipfile(self.file):
             self.file = zipfile.ZipFile(self.file)
             self.load_zip()
+            self.load_samples_from_zip()
         else:
             self.load_ini()
-
-        self.load_samples()
-        self.split_instruments()
+            self.load_samples_from_txt()
 
     def load_instruments(self):
         self.instruments = defaultdict(set)
@@ -71,7 +71,7 @@ class SoundFont:
         for names in instruments:
             new_instrument = Instrument()
             for name in names:
-                self.instruments[name.lower()].add(new_instrument)
+                self.instruments[str(name).lower()].add(new_instrument)
             self.instruments["all"].add(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
@@ -114,17 +114,25 @@ class SoundFont:
             if text == "":
                 continue
             elif text.startswith("[") and text.endswith("]"):
+                print(text)
                 header_name = text[1:-1].lower()
-                if header_name in ("default", "all"):
+                if header_name in ("arguments", "args", "options"):
+                    affected_instruments = []
+                    parse_arguments = True
+                elif header_name in ("default", "all"):
                     affected_instruments = self.instruments["all"]
+                    parse_arguments = False
                 elif header_name in self.instruments:
                     affected_instruments = self.instruments[header_name]
+                    parse_arguments = False
                 elif header_name in self.percussion:
                     affected_instruments = self.percussion[header_name]
+                    parse_arguments = False
                 elif len(header_name) == 3 and header_name.startswith("p"):
                     try:
                         affected_instruments = percussion[int(header_name[1:])]
-                    except ValueError, KeyError:
+                        parse_arguments = False
+                    except (ValueError, KeyError):
                         raise SoundFontSyntaxError(
                             linenum, raw_text, "Header not recognized.")
                 else:
@@ -189,12 +197,13 @@ class SoundFont:
         # only works on non-zip files
         return normpath(join(dirname(abspath(self.file.name)), relpath))
 
-    def load_samples(self):
+    def load_samples_from_txt(self):
         loaded_samples = {fn: Sample(self.wavpath(fn)) for fn in self.samples}
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
                     instrument.sample = loaded_samples[instrument.sample]
+        self.add_samples(loaded_samples)
 
     def load_samples_from_zip(self):
         loaded_samples = {}
@@ -202,6 +211,15 @@ class SoundFont:
             filepath = normpath(join(dirname(abspath(self.file.fp.name)), fn))
             with self.file.open(filepath) as zipped_wav:
                 loaded_samples[fn] = Sample(zipped_wav)
+        self.add_samples(loaded_samples)
+
+    def add_samples(self, loaded_samples):
+        max_framerate = max(s.framerate for s in loaded_samples.values())
+        for samp in loaded_samples.values():
+            multiplier = max_framerate / samp.framerate
+            samp._img = samp.img.resize(
+                (int(round(samp.img.size[0] * multiplier)), samp.channels),
+                resample=BILINEAR)
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
