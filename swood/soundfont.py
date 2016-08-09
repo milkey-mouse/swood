@@ -130,7 +130,8 @@ class SoundFont:
                     parse_arguments = False
                 elif len(header_name) == 3 and header_name.startswith("p"):
                     try:
-                        affected_instruments = percussion[int(header_name[1:])]
+                        affected_instruments = \
+                            self.percussion[int(header_name[1:])]
                         parse_arguments = False
                     except (ValueError, KeyError):
                         raise SoundFontSyntaxError(
