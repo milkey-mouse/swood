@@ -18,7 +18,7 @@ class CalculatedFFT:
 class Sample:
     """Reads and analyzes WAV files."""
 
-    def __init__(self, filename, binsize=8192, volume=1):
+    def __init__(self, filename, binsize=8192, volume=0.9):
         self.binsize = binsize
 
         if binsize < 2:

@@ -12,6 +12,7 @@ from . import wavout
 
 class CachedNote:
     """Holds pre-rendered versions of notes, tracking # of uses."""
+
     def __init__(self, length, rendered, cutoffs):
         self.used = 1
         self.length = length
@@ -63,12 +64,12 @@ class NoteRenderer:
         """Render a single note and return an array (with optional cutoffs)."""
         scaled = self.zoom(self.sample.img,
                            self.sample.fundamental_freq / note.pitch)
-
-        if note.fullclip:
+        if self.fullclip:
             return scaled, full(self.sample.channels, scaled.shape[1], dtype=int32)
         if note.bend:
             raise NotImplementedError
-            #return scaled[note.samplestart:note.samplestart + note.length], full(self.sample.channels, scaled.shape[1], dtype=int32)
+            # return scaled[note.samplestart:note.samplestart + note.length],
+            # full(self.sample.channels, scaled.shape[1], dtype=int32)
 
         # cache variables for faster lookups
         # see https://stackoverflow.com/q/37202463
@@ -99,7 +100,7 @@ class NoteRenderer:
 
     def render(self, midi, filename=None, pbar=False, savetype=FileSaveType.SMART_CACHING, clear_cache=True):
         """Renders from a MIDIParser to an array or WAV file using Samples.
-        
+
         Args:
             midi: The (pre-parsed) MIDI file to render.
             filename: A file or file path to save the WAV file to. Not needed with

@@ -61,7 +61,15 @@ class MIDIParser:
 
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
+                if mid.type == 2:
+                    raise complain.ComplainToUser(
+                        "Type 2 (asynchronous) MIDI files are not supported.")
                 time = 0
+                # label messages from each track
+                for track_idx, track in enumerate(mid.tracks):
+                    for message in track:
+                        # mido hooks __setattr__ so can't set stuff directly
+                        vars(message)["track_idx"] = track_idx
                 for message in mid:
                     time += message.time / speed
                     if "channel" in vars(message) and message.channel == 10:
@@ -83,7 +91,7 @@ class MIDIParser:
                             note = playing[message.note].pop()
                         except IndexError:  # the pop will fail if there aren't any matching notes playing
                             print(
-                                "Warning: There was a note end event at {} seconds with no matching begin event".format(time))
+                                "Warning: Note end event with no matching begin event @ {}".format(time))
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
                         note.finalize(time_samples)
@@ -110,8 +118,7 @@ class MIDIParser:
                                     note.length = None
                                     note.bend = bend
                 if len(playing) != 0:
-                    print(
-                        "Warning: The MIDI ended with notes still playing, assuming they end when the MIDI does")
+                    print("Warning: The MIDI ended with notes still playing.")
                     for notelist in playing.values():
                         for note in notelist:
                             note.length = int(

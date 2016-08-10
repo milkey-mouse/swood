@@ -34,7 +34,7 @@ class SoundFontSyntaxError(complain.ComplainToUser, SyntaxError):
 class Instrument:
     """Holds information about a MIDI instrument (or channel)."""
 
-    def __init__(self, sample=None, volume=100, pan=0.5):
+    def __init__(self, sample=None, volume=90, pan=0.5):
         self.sample = sample
         self.volume = volume
         self.pan = pan
@@ -174,6 +174,9 @@ class SoundFont:
                     for instrument in affected_instruments:
                         try:
                             instrument.volume = int(value)
+                            if instrument.volume > 95:
+                                print(
+                                    "Warning: Volumes higher than 95 may cause clipping or other glitches")
                         except ValueError:
                             raise SoundFontSyntaxError(
                                 linenum, raw_text, "'{}' is not a valid number".format(value))
