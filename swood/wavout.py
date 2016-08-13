@@ -24,13 +24,15 @@ class UncachedWavFile:
             cutoffs: An array of integers that specifies where to cut off each channel. (optional)
         """
         if cutoffs is None:
-            cutoffs = full(self.channels.shape[
-                           0], scaled.shape[1], dtype=int32)
+            cutoffs = full(self.channels.shape[0],
+                           scaled.shape[1], dtype=int32)
         for chan in range(self.channels.shape[0]):
-            length = min(self.channels.shape[
-                         1] - start, data.shape[1], cutoffs[chan])
-            self.channels[chan][
-                start:start + length] += data[chan][:length].astype(self.channels.dtype)
+            selectChan = min(chan, data.shape[0])
+            length = min(self.channels.shape[1] - start,
+                         cutoffs[selectChan],
+                         data.shape[1])
+            self.channels[chan][start:start + length] += \
+                data[selectChan][:length].astype(self.channels.dtype)
 
     def save(self):
         """Write the output array to the file."""
@@ -66,7 +68,7 @@ def CachedWavFile(*args, **kwargs):
         return MemMapWavFile(*args, **kwargs)
     except PermissionError:
         return ChunkedWavFile(*args, **kwargs)
-    except (Exception, e):
+    except Exception as e:
         # Probably has more obscure errors here so just ignore them
         return ChunkedWavFile(*args, **kwargs)  # shh bby is ok
 
@@ -109,13 +111,15 @@ class MemMapWavFile:
             cutoffs: An array of integers that specifies where to cut off each channel. (optional)
         """
         if cutoffs is None:
-            cutoffs = full(self.channels.shape[
-                           0], scaled.shape[1], dtype=int32)
+            cutoffs = full(self.channels.shape[0],
+                           scaled.shape[1], dtype=int32)
         for chan in range(self.channels.shape[0]):
-            length = min(self.channels.shape[
-                         1] - start, data.shape[1], cutoffs[chan])
-            self.channels[chan][
-                start:start + length] += data[chan][:length].astype(self.channels.dtype)
+            selectChan = min(chan, data.shape[0])
+            length = min(self.channels.shape[1] - start,
+                         cutoffs[selectChan],
+                         data.shape[1])
+            self.channels[chan][start:start + length] += \
+                data[selectChan][:length].astype(self.channels.dtype)
 
     def save(self):
         del self.wav_mmap  # the way to close a memmap is to delete it
@@ -204,11 +208,13 @@ class ChunkedWavFile:
         the end of a file fills the unwritten part with zeros. Unfortunately,
         doing so is still undefined behavior and should be avoided. This function
         iterates over the unwritten chunks, filling them with zeros."""
-        for chunk_idx in range(max(self.saved_to_disk)):
-            if chunk_idx not in self.saved_to_disk:
-                # the chunk won't exist but it will create it full of zeros &
-                # save it
-                self._save_chunk(chunk_idx)
+        try:
+            for chunk_idx in range(max(self.saved_to_disk)):
+                if chunk_idx not in self.saved_to_disk:
+                    # the chunk won't exist but it will create it full of zeros
+                    self._save_chunk(chunk_idx)
+        except ValueError:  # if no chunks are stored to disk max() will fail
+            pass
 
     def add_data(self, start, data, cutoffs):
         """Add sound data at a specified position.
@@ -223,32 +229,36 @@ class ChunkedWavFile:
         chunk_start = start // chunksize
         chunk_offset = start - (chunk_start * chunksize)
         for chan in range(self.channels):
+            selectChan = min(chan, data.shape[0])
             current_chunk = chunk_start
-            cutoff = min(cutoffs[chan], len(data[chan]))
+            cutoff = min(cutoffs[selectChan], len(data[selectChan]))
             if cutoff + chunk_offset <= chunksize:
                 self.chunks[current_chunk][chan][chunk_offset:chunk_offset + cutoff] += \
-                    data[chan][:cutoff]
+                    data[selectChan][:cutoff]
             else:
                 self.chunks[current_chunk][chan][chunk_offset:] += \
-                    data[chan][:chunksize - chunk_offset]
+                    data[selectChan][:chunksize - chunk_offset]
                 bytes_remaining = cutoff - chunksize + chunk_offset
                 current_chunk += 1
                 while bytes_remaining >= chunksize:
                     self.chunks[current_chunk][chan] += \
-                        data[chan][cutoff - bytes_remaining:
-                                   cutoff - bytes_remaining + chunksize]
+                        data[selectChan][cutoff - bytes_remaining:
+                                         cutoff - bytes_remaining + chunksize]
                     current_chunk += 1
                     bytes_remaining -= chunksize
                 self.chunks[current_chunk][chan][:bytes_remaining] += \
-                    data[chan][cutoff - bytes_remaining:cutoff]
+                    data[selectChan][cutoff - bytes_remaining:cutoff]
         self.flush_cache(chunk_start)
 
     def save(self):
         """Flush the cache of chunks to disk, patch the WAV header with the new length, and close the file."""
         self.flush_cache()
         self.fill_empty_chunks()
-        self.wav._datawritten = (
-            max(self.saved_to_disk) + 1) * self.chunkspacing
+        try:
+            self.wav._datawritten = (
+                max(self.saved_to_disk) + 1) * self.chunkspacing
+        except ValueError:
+            self.wav._datawritten = 0
         self.wav._patchheader()
         if self._auto_close:
             self.wavfile.close()

@@ -6,7 +6,8 @@ import operator
 
 import mido
 
-from . import complain
+from . import complain, soundfont
+from .sample import Sample
 
 
 def note_to_freq(notenum):
@@ -20,30 +21,31 @@ def note_to_freq(notenum):
 class Note:
     """Holds information about each MIDI note."""
 
-    def __init__(self, samplestart=0, length=0, volume=127, starttime=0, pitch=0, bend=0):
-        self.samplestart = samplestart
-        self.starttime = starttime
-        self.length = length
+    def __init__(self, volume=127, start=0, pitch=0, instrument=1, percussion=False):
+        self.instrument = instrument
+        self.percussion = percussion
+
         self.volume = volume
+        self.start = start
         self.pitch = pitch
-        self.bend = bend
+        self.length = 0
 
     def __hash__(self):
-        return hash((self.length, self.pitch, self.samplestart))
+        return hash((self.length, self.pitch, self.start, hash(self.instrument), self.percussion))
 
     def __eq__(self, other):
-        return self.length == other.length and self.pitch == other.pitch
+        return hash(self) == hash(other)
 
     def __len__(self):
         return len(self.data)
 
     def __repr__(self):
-        return "Note(length={}, pitch={}, starttime={}, samplestart={}, bend={})".format(
-            self.length, self.pitch, self.starttime, self.samplestart, self.bend)
+        return "Note(length={}, volume={}, start={}, pitch={})".format(self.length, self.volume, self.start, self.pitch)
 
     def finalize(self, time):
-        self.pitch = note_to_freq(self.pitch + self.bend)
-        self.length = time - self.starttime
+        if not self.percussion:
+            self.pitch = note_to_freq(self.pitch)
+        self.length = time - self.start
         return self
 
 
@@ -53,39 +55,54 @@ class MIDIParser:
     def __init__(self, filename, sample, transpose=0, speed=1):
         playing = collections.defaultdict(list)
         notes = collections.defaultdict(list)
+        # default to acoustic piano
+        self.channel_instruments = [next(iter(sample.instruments[1])), ] * 16
         self.notecount = 0
         self.maxvolume = 0
         self.maxpitch = 0
         volume = 0
-        bend = 0
 
         try:
             with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
                 if mid.type == 2:
                     raise complain.ComplainToUser(
                         "Type 2 (asynchronous) MIDI files are not supported.")
-                time = 0
+
                 # label messages from each track
                 for track_idx, track in enumerate(mid.tracks):
                     for message in track:
-                        # mido hooks __setattr__ so can't set stuff directly
+                        # mido hooks __setattr__ so we can't set stuff directly
                         vars(message)["track_idx"] = track_idx
+
+                time = 0
                 for message in mid:
                     time += message.time / speed
-                    if "channel" in vars(message) and message.channel == 10:
-                        continue  # channel 10 is reserved for percussion
                     time_samples = int(round(time * sample.framerate))
-                    # ugh, string-typing
-                    if message.type == "note_on":
-                        playing[message.note].append(
-                            Note(starttime=time_samples,
-                                 volume=message.velocity,
-                                 pitch=message.note + transpose,
-                                 bend=bend))
-                        volume += message.velocity
+
+                    if message.type == "note_on":  # ugh, string-typing
+                        if message.channel == 10:
+                            try:
+                                instrument = sample.percussion[message.note]
+                                playing[message.note].append(
+                                    Note(start=time_samples,
+                                         volume=message.velocity * instrument.volume,
+                                         instrument=instrument,
+                                         percussion=True))
+                            except KeyError:
+                                print(
+                                    "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note))
+                        else:
+                            instrument = self.channel_instruments[
+                                message.channel]
+                            playing[message.note].append(
+                                Note(start=time_samples,
+                                     volume=message.velocity * instrument.volume,
+                                     pitch=message.note + transpose,
+                                     instrument=instrument))
+                        volume += message.velocity * instrument.volume
                         self.maxvolume = max(volume, self.maxvolume)
-                        self.maxpitch = max(
-                            self.maxpitch, message.note + transpose + bend)
+                        self.maxpitch = max(message.note + transpose,
+                                            self.maxpitch)
                     elif message.type == "note_off":
                         try:
                             note = playing[message.note].pop()
@@ -95,28 +112,13 @@ class MIDIParser:
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
                         note.finalize(time_samples)
-                        note.bend = False
-                        notes[note.starttime].append(note)
+                        notes[note.start].append(note)
                         self.notecount += 1
                         volume -= note.volume
-                    elif message.type == "pitchwheel":
-                        # stop the note and start a new one at that time
-                        newbend = message.pitch / 8192 * 12
-                        if newbend != bend:
-                            bend = newbend
-                            for notelist in playing.values():
-                                for note in notelist:
-                                    oldnote = copy(note)
-                                    oldnote.finalize(time_samples)
-                                    oldnote.bend = True
-                                    notes[note.starttime].append(oldnote)
-
-                                    note.samplestart = int(
-                                        round(oldnote.length / oldnote.pitch))
-                                    note.start = oldnote.length
-                                    self.notecount += 1
-                                    note.length = None
-                                    note.bend = bend
+                    elif message.type == "program_change":
+                        # the next(iter()) is a hacky way to "peek" for sets
+                        self.channel_instruments[message.channel] = \
+                            next(iter(sample.instruments[message.program + 1]))
                 if len(playing) != 0:
                     print("Warning: The MIDI ended with notes still playing.")
                     for notelist in playing.values():
@@ -126,7 +128,7 @@ class MIDIParser:
                             self.notecount += 1
                 self.notes = sorted(notes.items(), key=operator.itemgetter(0))
                 self.length = max(
-                    max(note.starttime + note.length for note in nlist) for _, nlist in self.notes)
+                    max(note.start + note.length for note in nlist) for _, nlist in self.notes)
                 self.maxpitch = note_to_freq(self.maxpitch)
         except IOError:
             raise complain.ComplainToUser(

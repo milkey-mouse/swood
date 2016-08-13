@@ -68,7 +68,11 @@ def run_cmd(argv=sys.argv):
     from . import complain, midiparse, render, sample, soundfont
 
     with complain.ComplaintFormatter():
-        sample = sample.Sample(args.infile, args.binsize)
+        if is_wav(args.infile):
+            sample = soundfont.DefaultFont(
+                sample.Sample(args.infile, args.binsize))
+        else:
+            sample = soundfont.SoundFont(args.infile, args)
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)

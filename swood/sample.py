@@ -28,6 +28,14 @@ class Sample:
         self._fft = None
         self._img = None
 
+        if isinstance(filename, str):
+            self.filename = str
+        else:
+            try:
+                self.filename = "<file handle {}>".format(filename.fileno())
+            except:
+                self.filename = "<unknown file handle>"
+
         self.wav = self.parse_wav(filename)
 
         max_amplitude = int(max(max(abs(min(chan)), abs(max(chan)))

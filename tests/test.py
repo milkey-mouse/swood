@@ -59,6 +59,7 @@ if sys.argv[1] == "playall":
     run("beethoven", play=True)
     run("pitchbend", play=True, wait=True)
 elif sys.argv[1] == "all":
+    run("finalfantasy")
     run("dummy")
     run("beethoven")
     run("pitchbend")

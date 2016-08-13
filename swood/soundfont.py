@@ -32,15 +32,26 @@ class SoundFontSyntaxError(complain.ComplainToUser, SyntaxError):
 
 
 class Instrument:
-    """Holds information about a MIDI instrument (or channel)."""
+    """Holds information about a MIDI instrument or track."""
 
-    def __init__(self, sample=None, volume=90, pan=0.5):
+    def __init__(self, fullclip=False, noscale=False, sample=None, volume=0.9, pan=0.5):
+        self.fullclip = fullclip
+        self.noscale = noscale
         self.sample = sample
         self.volume = volume
         self.pan = pan
 
+    def __hash__(self):
+        if isinstance(self.sample, Sample):
+            return hash((self.noscale, self.sample.filename, self.volume, self.pan))
+        else:
+            return hash((self.noscale, None, self.volume, self.pan))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     def __repr__(self):
-        return "Instrument(sample={}, volume={}, pan={})".format(self.sample, self.volume, self.pan)
+        return "Instrument(noscale={}, sample={}, volume={}, pan={})".format(self.noscale, self.sample, self.volume, self.pan)
 
 
 class SoundFont:
@@ -54,16 +65,17 @@ class SoundFont:
 
         if isinstance(filename, str):
             self.file = open(filename)
-        else:
+        elif filename is not None:
             self.file = filename
 
-        if zipfile.is_zipfile(self.file):
-            self.file = zipfile.ZipFile(self.file)
-            self.load_zip()
-            self.load_samples_from_zip()
-        else:
-            self.load_ini()
-            self.load_samples_from_txt()
+        if filename is not None:
+            if zipfile.is_zipfile(self.file):
+                self.file = zipfile.ZipFile(self.file)
+                self.load_zip()
+                self.load_samples_from_zip()
+            else:
+                self.load_ini()
+                self.load_samples_from_txt()
 
     def load_instruments(self):
         self.instruments = defaultdict(set)
@@ -71,16 +83,22 @@ class SoundFont:
         for names in instruments:
             new_instrument = Instrument()
             for name in names:
-                self.instruments[str(name).lower()].add(new_instrument)
+                if isinstance(name, str):
+                    name = name.lower()
+                self.instruments[name].add(new_instrument)
+                self.instruments["non-percussion"].add(new_instrument)
             self.instruments["all"].add(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
         # denoted by the note number (with valid #s ranging 35-81).
         for idx, *names in percussion:
-            new_instrument = Instrument()
+            new_instrument = Instrument(fullclip=True, noscale=True)
             self.percussion[idx].add(new_instrument)
             for name in names:
-                self.percussion[name.lower()].add(new_instrument)
+                if isinstance(name, str):
+                    name = name.lower()
+                self.percussion[name].add(new_instrument)
+                self.percussion["percussion"].add(new_instrument)
             self.instruments["all"].add(new_instrument)
 
     def load_ini(self):
@@ -128,6 +146,9 @@ class SoundFont:
                 elif header_name in self.percussion:
                     affected_instruments = self.percussion[header_name]
                     parse_arguments = False
+                elif header_name in ("non percussion", "nonpercussion"):
+                    affected_instruments = self.percussion["non-percussion"]
+                    parse_arguments = False
                 elif len(header_name) == 3 and header_name.startswith("p"):
                     try:
                         affected_instruments = \
@@ -154,7 +175,6 @@ class SoundFont:
                         "speed": float,
                         "cachesize": float,
                         "binsize": int,
-                        "fullclip": bool,
                     }
                     if name in possible_args:
                         try:
@@ -173,8 +193,8 @@ class SoundFont:
                 elif name in ("volume", "vol"):
                     for instrument in affected_instruments:
                         try:
-                            instrument.volume = int(value)
-                            if instrument.volume > 95:
+                            instrument.volume = int(value) / 100
+                            if instrument.volume > 0.95:
                                 print(
                                     "Warning: Volumes higher than 95 may cause clipping or other glitches")
                         except ValueError:
@@ -193,6 +213,24 @@ class SoundFont:
                             else:
                                 instrument.pan = pan
                         instrument.pan = float(value)
+                elif name == "fullclip":
+                    for instrument in affected_instruments:
+                        if value.lower() == "true":
+                            instrument.fullclip = True
+                        elif value.lower() == "false":
+                            instrument.fullclip = False
+                        else:
+                            raise SoundFontSyntaxError(linenum, raw_text,
+                                                       "fullclip must be 'True' or 'False'; '{}' is invalid".format(value))
+                elif name == "noscale":
+                    for instrument in affected_instruments:
+                        if value.lower() == "true":
+                            instrument.noscale = True
+                        elif value.lower() == "false":
+                            instrument.noscale = False
+                        else:
+                            raise SoundFontSyntaxError(linenum, raw_text,
+                                                       "noscale must be 'True' or 'False'; '{}' is invalid".format(value))
                 else:
                     raise SoundFontSyntaxError(
                         linenum, raw_text, "'{}' is not a valid property".format(name))
@@ -202,7 +240,12 @@ class SoundFont:
         return normpath(join(dirname(abspath(self.file.name)), relpath))
 
     def load_samples_from_txt(self):
-        loaded_samples = {fn: Sample(self.wavpath(fn)) for fn in self.samples}
+        loaded_samples = {}
+        for fn in self.samples:
+            loaded_samples[fn] = Sample(
+                self.wavpath(fn),
+                self.arguments.binsize
+            )
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
@@ -214,13 +257,15 @@ class SoundFont:
         for fn in self.samples:
             filepath = normpath(join(dirname(abspath(self.file.fp.name)), fn))
             with self.file.open(filepath) as zipped_wav:
-                loaded_samples[fn] = Sample(zipped_wav)
+                loaded_samples[fn] = Sample(zipped_wav, self.arguments.binsize)
         self.add_samples(loaded_samples)
 
     def add_samples(self, loaded_samples):
-        max_framerate = max(s.framerate for s in loaded_samples.values())
+        self.framerate = max(s.framerate for s in loaded_samples.values())
+        self.channels = max(s.channels for s in loaded_samples.values())
+        self.length = max(len(s) for s in loaded_samples.values())
         for samp in loaded_samples.values():
-            multiplier = max_framerate / samp.framerate
+            multiplier = self.framerate / samp.framerate
             samp._img = samp.img.resize(
                 (int(round(samp.img.size[0] * multiplier)), samp.channels),
                 resample=BILINEAR)
@@ -228,3 +273,17 @@ class SoundFont:
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
                     instrument.sample = loaded_samples[instrument.sample]
+
+    def __len__(self):
+        return self.length
+
+
+def DefaultFont(samp):
+    sf = SoundFont(None, None)
+    sf.framerate = samp.framerate
+    sf.channels = samp.channels
+    sf.length = samp.length
+    for instruments in sf.instruments.values():
+        for instrument in instruments:
+            instrument.sample = samp
+    return sf
