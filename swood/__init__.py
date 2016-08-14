@@ -39,7 +39,7 @@ def run_cmd(argv=sys.argv[1:]):
 
     parser.add_argument("infile", type=argparse.FileType("rb"),
                         help="a short wav file to sample as the instrument, or a swood config file")
-    parser.add_argument("midi", type=argparse.FileType("rb"),
+    parser.add_argument("midi", type=mido.MidiFile,
                         help="the MIDI to play with the wav sample")
     parser.add_argument("output", type=argparse.FileType("wb"),
                         help="path for the output wav file")
