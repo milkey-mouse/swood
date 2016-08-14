@@ -32,14 +32,15 @@ def is_wav(f):
 
 
 def run_cmd(argv=sys.argv):
-    basename = os.path.basename(sys.argv[0])
+    basename = os.path.basename(argv[0])
     parser = argparse.ArgumentParser(prog="swood" if basename == "swood-script.py" else basename,
                                      description="swood.exe: the automatic ytpmv generator",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument("infile", type=argparse.FileType("rb"),
                         help="a short wav file to sample as the instrument, or a swood config file")
-    parser.add_argument("midi", type=mido.MidiFile,
+    # type=mido.MidiFile works too, but throws more obscure errors
+    parser.add_argument("midi", type=str,
                         help="the MIDI to play with the wav sample")
     parser.add_argument("output", type=argparse.FileType("wb"),
                         help="path for the output wav file")
@@ -66,7 +67,7 @@ def run_cmd(argv=sys.argv):
     parser.add_argument("--version", "-v", action="version", version=version_info(),
                         help="get the versions of swood and its dependencies")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv[1:])
 
     from . import complain, midiparse, render, sample, soundfont
 
