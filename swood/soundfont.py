@@ -119,7 +119,7 @@ class SoundFont:
             raise complain.ComplainToUser(
                 "Couldn't find config file in ZIP. Be sure it ends in .ini, .swood, or .txt.'")
         config_txt = self.file.read(ini_path)
-        tokenize(config_txt)
+        self.parse(config_txt.decode("utf-8"))
 
     def strip_comments(self, line):
         hash_index = line.find("#")
@@ -257,9 +257,11 @@ class SoundFont:
     def load_samples_from_zip(self):
         loaded_samples = {}
         for fn in self.samples:
-            filepath = normpath(join(dirname(abspath(self.file.fp.name)), fn))
-            with self.file.open(filepath) as zipped_wav:
-                loaded_samples[fn] = Sample(zipped_wav, self._binsize)
+            try:
+                with self.file.open(fn) as zipped_wav:
+                    loaded_samples[fn] = Sample(zipped_wav, self._binsize)
+            except KeyError:  # file not found in zip
+                    raise complain.ComplainToUser("Sample '{}' not found in config ZIP")
         self.add_samples(loaded_samples)
 
     def add_samples(self, loaded_samples):
