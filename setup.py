@@ -47,7 +47,8 @@ def get_flags():
         # something feels very wrong about running assembly in python
         # most of this taken from https://github.com/workhorsy/py-cpuinfo
 
-        sixtyfour = sys.maxsize > 2 ** 32  # the docs say platform.machine() can be unreliable
+        # the docs say platform.machine() can be unreliable
+        sixtyfour = sys.maxsize > 2 ** 32
 
         def asm_func(restype=None, argtypes=(), byte_code=[]):
             byte_code = bytes.join(b'', byte_code)
@@ -75,7 +76,8 @@ def get_flags():
 
         def run_asm(*byte_code):
             # Convert the byte code into a function that returns an int
-            func, address = asm_func(ctypes.c_uint64 if sixtyfour else ctypes.c_uint32, (), byte_code)
+            func, address = asm_func(
+                ctypes.c_uint64 if sixtyfour else ctypes.c_uint32, (), byte_code)
             # Call the byte code like a function
             retval = func()
             size = ctypes.c_size_t(len(byte_code))
@@ -104,14 +106,16 @@ def get_flags():
                       b"\xC3")            # ret
 
         ebx = run_asm(
-                b"\xB8\x01\x00\x00\x80"  # mov ax,0x80000001
-                b"\x0f\xa2"         # cpuid
-                b"\x89\xD8"         # mov ax,bx
-                b"\xC3")            # ret
+            b"\xB8\x01\x00\x00\x80"  # mov ax,0x80000001
+            b"\x0f\xa2"         # cpuid
+            b"\x89\xD8"         # mov ax,bx
+            b"\xC3")            # ret
 
         sse4 = is_bit_set(ecx, 19) or is_bit_set(ecx, 20)
 
-        avx2 = is_bit_set(ebx, 5)  # because a midi synthesizer definitely needs to support server-grade hardware
+        # because a midi synthesizer definitely needs to support server-grade
+        # hardware
+        avx2 = is_bit_set(ebx, 5)
     except Exception:
         pass
     return (sse4, avx2)
@@ -120,7 +124,8 @@ install = False
 simd = False
 
 if len(sys.argv) > 1 and "install" in sys.argv:
-    pkgs = [package.project_name.lower() for package in pip.get_installed_distributions()]
+    pkgs = [package.project_name.lower()
+            for package in pip.get_installed_distributions()]
 
     if "pillow-simd" in pkgs:
         print("pillow-simd is already installed. swood will install with SIMD support.")
@@ -131,19 +136,22 @@ if len(sys.argv) > 1 and "install" in sys.argv:
             import ctypes
             sse4, avx2 = get_flags()
             if avx2:
-                print("Your processor supports AVX2. swood will install with SIMD support.")
+                print(
+                    "Your processor supports AVX2. swood will install with SIMD support.")
                 os.environ["CFLAGS"] = "-mavx2"
                 install = True
                 simd = True
             elif sse4:
-                print("Your processor supports SSE4. swood will install with SIMD support.")
+                print(
+                    "Your processor supports SSE4. swood will install with SIMD support.")
                 install = True
                 simd = True
         except:
             simd = False
 
     # we need to install numpy first because pyfftw needs it and pip has bad dependency resolution
-    # and we need to set this flag because pyFFTW uses a deprecated API apparently
+    # and we need to set this flag because pyFFTW uses a deprecated API
+    # apparently
     os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
 
     for pkg in ("numpy", "pyfftw", "progressbar2"):
@@ -164,7 +172,7 @@ if not simd:
 
 setup(
     name='swood',
-    version='0.9.9',
+    version='1.0.0',
     description='With just one sample and a MIDI you too can make YTPMVs',
     long_description='Are you tired of manually pitch-adjusting every sound for your shitposts? Toil no more with auto-placement of sound samples according to a MIDI!',
     url='https://meme.institute/swood',
