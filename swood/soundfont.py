@@ -57,8 +57,9 @@ class Instrument:
 class SoundFont:
     """Parses and holds information about .swood files."""
 
-    def __init__(self, filename, arguments):
+    def __init__(self, filename, arguments, binsize=8192):
         self.arguments = arguments
+        self._binsize = binsize
         self.load_instruments()
         self.samples = set()
         self.channels = {}
@@ -180,8 +181,7 @@ class SoundFont:
                     }
                     if name in possible_args:
                         try:
-                            setattr(self.arguments, name,
-                                    possible_args[name](value))
+                            self.arguments[name] = possible_args[name](value)
                         except ValueError:
                             raise SoundFontSyntaxError(
                                 linenum, raw_text, "'{}' is not a valid value for '{}'".format(value, name))
@@ -246,7 +246,7 @@ class SoundFont:
         for fn in self.samples:
             loaded_samples[fn] = Sample(
                 self.wavpath(fn),
-                self.arguments.binsize
+                self._binsize
             )
         for instruments in self.instruments.values():
             for instrument in instruments:
@@ -259,7 +259,7 @@ class SoundFont:
         for fn in self.samples:
             filepath = normpath(join(dirname(abspath(self.file.fp.name)), fn))
             with self.file.open(filepath) as zipped_wav:
-                loaded_samples[fn] = Sample(zipped_wav, self.arguments.binsize)
+                loaded_samples[fn] = Sample(zipped_wav, self._binsize)
         self.add_samples(loaded_samples)
 
     def add_samples(self, loaded_samples):

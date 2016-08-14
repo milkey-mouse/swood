@@ -31,7 +31,7 @@ def is_wav(f):
     return riff and wave
 
 
-def run_cmd(argv=sys.argv[1:]):
+def run_cmd(argv=sys.argv):
     basename = os.path.basename(sys.argv[0])
     parser = argparse.ArgumentParser(prog="swood" if basename == "swood-script.py" else basename,
                                      description="swood.exe: the automatic ytpmv generator",
@@ -75,9 +75,17 @@ def run_cmd(argv=sys.argv[1:]):
             sample = soundfont.DefaultFont(
                 sample.Sample(args.infile, args.binsize))
         else:
-            sample = soundfont.SoundFont(args.infile, args)
-            # reparse to ensure cli args take precedence over config
-            parser.parse_args(argv, args)
+            config_options = {}
+            sample = soundfont.SoundFont(
+                args.infile, config_options, binsize=args.binsize)
+            # ensure cli args take precedence over config by
+            # only changing arguments currently at their default
+            for name, value in config_options.items():
+                for option in parser._actions:
+                    if option.dest == name:
+                        if option.default == vars(args)[name]:
+                            vars(args)[name] = value
+                        break
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
