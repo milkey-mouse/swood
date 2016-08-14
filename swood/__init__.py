@@ -1,4 +1,5 @@
 import argparse
+import os.path
 import mido
 import sys
 
@@ -31,7 +32,8 @@ def is_wav(f):
 
 
 def run_cmd(argv=sys.argv[1:]):
-    parser = argparse.ArgumentParser(prog="swood" if sys.argv[0] == "swood-script.py" else sys.argv[0],
+    basename = os.path.basename(sys.argv[0])
+    parser = argparse.ArgumentParser(prog="swood" if basename == "swood-script.py" else basename,
                                      description="swood.exe: the automatic ytpmv generator",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
