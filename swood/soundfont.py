@@ -87,7 +87,7 @@ class SoundFont:
                     name = name.lower()
                 self.instruments[name].add(new_instrument)
                 self.instruments["non-percussion"].add(new_instrument)
-            self.instruments["all"].add(new_instrument)
+                self.instruments["all"].add(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
         # denoted by the note number (with valid #s ranging 35-81).
@@ -99,11 +99,14 @@ class SoundFont:
                     name = name.lower()
                 self.percussion[name].add(new_instrument)
                 self.percussion["percussion"].add(new_instrument)
-            self.instruments["all"].add(new_instrument)
+                self.instruments["all"].add(new_instrument)
 
     def load_ini(self):
         self.file.seek(0)
-        self.parse(self.file.read())
+        if "b" in self.file.mode:
+            self.parse(self.file.read().decode("utf-8"))
+        else:
+            self.parse(self.file.read())
 
     def load_zip(self):
         """Parses a ZIP of a .swood INI file and its samples without extracting."""
@@ -132,7 +135,6 @@ class SoundFont:
             if text == "":
                 continue
             elif text.startswith("[") and text.endswith("]"):
-                print(text)
                 header_name = text[1:-1].lower()
                 if header_name in ("arguments", "args", "options"):
                     affected_instruments = []
