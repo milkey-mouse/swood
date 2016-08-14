@@ -11,7 +11,7 @@
             "debugOptions": [
                 "RedirectOutput"
             ],
-            "env": {"SWOOD_OPTOUT":"1"},
+            "env": {"SWOOD_OPTOUT":"1"}
         },
         {
             "name": "swood (test all)",
