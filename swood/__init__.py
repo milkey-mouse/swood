@@ -30,9 +30,10 @@ def is_wav(f):
     return riff and wave
 
 
-def run_cmd(argv=sys.argv):
-    parser = argparse.ArgumentParser(
-        description="swood.exe: the automatic ytpmv generator", formatter_class=argparse.RawDescriptionHelpFormatter)
+def run_cmd(argv=sys.argv[1:]):
+    parser = argparse.ArgumentParser(prog="swood" if sys.argv[0] == "swood-script.py" else sys.argv[0],
+                                     description="swood.exe: the automatic ytpmv generator",
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument("infile", type=argparse.FileType("rb"),
                         help="a short wav file to sample as the instrument, or a swood config file")
