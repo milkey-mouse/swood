@@ -163,11 +163,17 @@ class NoteRenderer:
                     rendered_note = CachedNote(time, *self.render_note(note))
                     notecache[note] = rendered_note
                 if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
-                    add_data(time, rendered_note.data *
-                             (note.volume / midi.maxvolume *
-                              note.instrument.volume),
-                             rendered_note.cutoffs)
-
+                    if note.instrument.pan == 0.5:
+                        add_data(time, rendered_note.data *
+                                 (note.volume / midi.maxvolume *
+                                  note.instrument.volume),
+                                 rendered_note.cutoffs)
+                    else:
+                        add_data(time, rendered_note.data *
+                                 (note.volume / midi.maxvolume *
+                                  note.instrument.volume),
+                                 rendered_note.cutoffs,
+                                 ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
                 if pbar:
                     # increment progress bar
                     progress += 1

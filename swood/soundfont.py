@@ -78,28 +78,28 @@ class SoundFont:
                 self.load_samples_from_txt()
 
     def load_instruments(self):
-        self.instruments = defaultdict(set)
-        self.percussion = defaultdict(set)
+        self.instruments = defaultdict(list)
+        self.percussion = defaultdict(list)
         for names in instruments:
             new_instrument = Instrument()
             for name in names:
                 if isinstance(name, str):
                     name = name.lower()
-                self.instruments[name].add(new_instrument)
-                self.instruments["non-percussion"].add(new_instrument)
-                self.instruments["all"].add(new_instrument)
+                self.instruments[name].append(new_instrument)
+                self.instruments["non-percussion"].append(new_instrument)
+            self.instruments["all"].append(new_instrument)
         # percussion is a bit weird as it doesn't actually use MIDI instruments;
         # any event on channel 10 is percussion, and the actual instrument is
         # denoted by the note number (with valid #s ranging 35-81).
         for idx, *names in percussion:
             new_instrument = Instrument(fullclip=True, noscale=True)
-            self.percussion[idx].add(new_instrument)
+            self.percussion[idx].append(new_instrument)
             for name in names:
                 if isinstance(name, str):
                     name = name.lower()
-                self.percussion[name].add(new_instrument)
-                self.percussion["percussion"].add(new_instrument)
-                self.instruments["all"].add(new_instrument)
+                self.percussion[name].append(new_instrument)
+                self.percussion["percussion"].append(new_instrument)
+            self.instruments["all"].append(new_instrument)
 
     def load_ini(self):
         self.file.seek(0)
@@ -275,6 +275,15 @@ class SoundFont:
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
                     instrument.sample = loaded_samples[instrument.sample]
+        if self.channels != 2:
+            warned_pan = False
+            for instruments in self.instruments.values():
+                for instrument in instruments:
+                    if instrument.pan != 0.5:
+                        instrument.pan = 0.5
+                        if not warned_pan:
+                            print("Warning: Audio has >2 channels; pan ignored")
+                            warned_pan = True
 
     def __len__(self):
         return self.length

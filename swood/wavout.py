@@ -15,24 +15,30 @@ class UncachedWavFile:
         self.framerate = framerate
         self.filename = filename
 
-    def add_data(self, start, data, cutoffs=None):
+    def add_data(self, start, data, cutoffs=None, volumes=None):
         """Add sound data at a specified position.
 
         Args:
             start: How many samples into the output the data should start.
             data: A NumPy array of data to add to the output.
             cutoffs: An array of integers that specifies where to cut off each channel. (optional)
+            volumes: An array of floats to multiply each channel's data by. (optional)
         """
         if cutoffs is None:
             cutoffs = full(self.channels.shape[0],
-                           scaled.shape[1], dtype=int32)
+                           data.shape[1], dtype=int32)
         for chan in range(self.channels.shape[0]):
             selectChan = min(chan, data.shape[0])
             length = min(self.channels.shape[1] - start,
                          cutoffs[selectChan],
                          data.shape[1])
-            self.channels[chan][start:start + length] += \
-                data[selectChan][:length].astype(self.channels.dtype)
+            if volumes is None:
+                self.channels[chan][start:start + length] += \
+                    data[selectChan][:length].astype(self.channels.dtype)
+            else:
+                self.channels[chan][start:start + length] += \
+                    data[selectChan][:length].astype(self.channels.dtype) * \
+                    volumes[selectChan]
 
     def save(self):
         """Write the output array to the file."""
@@ -102,24 +108,30 @@ class MemMapWavFile:
         self.framerate = framerate
         self.filename = filename
 
-    def add_data(self, start, data, cutoffs=None):
+    def add_data(self, start, data, cutoffs=None, volumes=None):
         """Add sound data at a specified position.
 
         Args:
             start: How many samples into the output the data should start.
             data: A NumPy array of data to add to the output.
             cutoffs: An array of integers that specifies where to cut off each channel. (optional)
+            volumes: An array of floats to multiply each channel's data by. (optional)
         """
         if cutoffs is None:
             cutoffs = full(self.channels.shape[0],
-                           scaled.shape[1], dtype=int32)
+                           data.shape[1], dtype=int32)
         for chan in range(self.channels.shape[0]):
             selectChan = min(chan, data.shape[0])
             length = min(self.channels.shape[1] - start,
                          cutoffs[selectChan],
                          data.shape[1])
-            self.channels[chan][start:start + length] += \
-                data[selectChan][:length].astype(self.channels.dtype)
+            if volumes is None:
+                self.channels[chan][start:start + length] += \
+                    data[selectChan][:length].astype(self.channels.dtype)
+            else:
+                self.channels[chan][start:start + length] += \
+                    data[selectChan][:length].astype(self.channels.dtype) * \
+                    volumes[selectChan]
 
     def save(self):
         del self.wav_mmap  # the way to close a memmap is to delete it
@@ -216,15 +228,24 @@ class ChunkedWavFile:
         except ValueError:  # if no chunks are stored to disk max() will fail
             pass
 
-    def add_data(self, start, data, cutoffs):
+    def add_data(self, start, data, cutoffs=None, volumes=None):
         """Add sound data at a specified position.
 
         Args:
             start: How many samples into the output the data should start.
             data: A NumPy array of data to add to the output.
             cutoffs: An array of integers that specifies where to cut off each channel. (optional)
+            volumes: An array of floats to multiply each channel's data by. (optional)
         """
+        if cutoffs is None:
+            cutoffs = full(self.channels, data.shape[1], dtype=int32)
+
+        if volumes is not None:
+            for chan in range(data.shape[0]):
+                data[chan] *= volumes[chan]
+
         data = data.astype(self.dtype)
+
         chunksize = self.chunksize
         chunk_start = start // chunksize
         chunk_offset = start - (chunk_start * chunksize)
@@ -237,13 +258,14 @@ class ChunkedWavFile:
                     data[selectChan][:cutoff]
             else:
                 self.chunks[current_chunk][chan][chunk_offset:] += \
-                    data[selectChan][:chunksize - chunk_offset]
+                    data[selectChan][:chunksize -
+                                     chunk_offset]
                 bytes_remaining = cutoff - chunksize + chunk_offset
                 current_chunk += 1
                 while bytes_remaining >= chunksize:
                     self.chunks[current_chunk][chan] += \
-                        data[selectChan][cutoff - bytes_remaining:
-                                         cutoff - bytes_remaining + chunksize]
+                        data[selectChan][
+                            cutoff - bytes_remaining:cutoff - bytes_remaining + chunksize]
                     current_chunk += 1
                     bytes_remaining -= chunksize
                 self.chunks[current_chunk][chan][:bytes_remaining] += \

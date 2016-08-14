@@ -73,6 +73,8 @@ def run_cmd(argv=sys.argv):
                 sample.Sample(args.infile, args.binsize))
         else:
             sample = soundfont.SoundFont(args.infile, args)
+            # reparse to ensure cli args take precedence over config
+            parser.parse_args(argv, args)
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)

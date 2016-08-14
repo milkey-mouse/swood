@@ -34,13 +34,13 @@ def play_audio(clip):
 running_player = None
 
 
-def run(midi, *args, play=False, wait=False):
+def run(midi, *args, play=False, wait=False, soundfont=False):
     global running_player
     print("~~~~~~~~~~ Testing '{}' ~~~~~~~~~~".format(midi))
     out = "outputs/" + midi + ".wav"
     start = time.perf_counter()
-    swood.run_cmd(argv=["samples/doot.wav", "midis/" +
-                        midi + ".mid", out, "--no-pbar", *args])
+    swood.run_cmd(argv=["samples/test.swood" if soundfont else "samples/doot.wav",
+                        "midis/" + midi + ".mid", out, "--no-pbar", *args])
     print("Finished '{}' in {} seconds.".format(
         midi, round(time.perf_counter() - start, 2)))
     if play:
@@ -57,11 +57,12 @@ def run(midi, *args, play=False, wait=False):
 if sys.argv[1] == "playall":
     run("dummy", play=True)
     run("beethoven", play=True)
-    run("pitchbend", play=True, wait=True)
+    run("finalfantasy", play=True, soundfont=True)
+    #run("pitchbend", play=True, wait=True)
 elif sys.argv[1] == "all":
-    run("finalfantasy")
     run("dummy")
     run("beethoven")
-    run("pitchbend")
+    run("finalfantasy", soundfont=True)
+    # run("pitchbend")
 elif sys.argv[1] == "bend":
     run("pitchbend")

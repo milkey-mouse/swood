@@ -1,11 +1,9 @@
 [default]
-file=doot.wav # testing
-volume=90     # comments
-pan=0.5
+file=doot.wav
+volume=90
+pan=0.3
 
-# testing comments on empty lines
-
-#[options]
-#fullclip=true
-#transpose=12
-#output=dootalovania.wav
+[options]
+fullclip=true
+transpose=12
+speed=1.25

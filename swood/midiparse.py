@@ -56,7 +56,7 @@ class MIDIParser:
         playing = collections.defaultdict(list)
         notes = collections.defaultdict(list)
         # default to acoustic piano
-        self.channel_instruments = [next(iter(sample.instruments[1])), ] * 16
+        self.channel_instruments = [sample.instruments[1][0], ] * 16
         self.notecount = 0
         self.maxvolume = 0
         self.maxpitch = 0
@@ -116,9 +116,8 @@ class MIDIParser:
                         self.notecount += 1
                         volume -= note.volume
                     elif message.type == "program_change":
-                        # the next(iter()) is a hacky way to "peek" for sets
                         self.channel_instruments[message.channel] = \
-                            next(iter(sample.instruments[message.program + 1]))
+                            sample.instruments[message.program + 1][0]
                 if len(playing) != 0:
                     print("Warning: The MIDI ended with notes still playing.")
                     for notelist in playing.values():
