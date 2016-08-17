@@ -48,7 +48,7 @@ def get_flags():
         # most of this taken from https://github.com/workhorsy/py-cpuinfo
 
         # the docs say platform.machine() can be unreliable
-        sixtyfour = sys.maxsize > 2 ** 32
+        sixtyfour = sys.maxsize == (2 ** 63) - 1
 
         def asm_func(restype=None, argtypes=(), byte_code=[]):
             byte_code = bytes.join(b'', byte_code)
