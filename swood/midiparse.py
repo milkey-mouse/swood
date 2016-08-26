@@ -21,7 +21,7 @@ def note_to_freq(notenum):
 class Note:
     """Holds information about each MIDI note."""
 
-    def __init__(self, volume=127, start=0, pitch=0, instrument=1, percussion=False):
+    def __init__(self, volume=127, start=0, pitch=0, instrument=None, percussion=False):
         self.instrument = instrument
         self.percussion = percussion
 
@@ -63,7 +63,7 @@ class MIDIParser:
         volume = 0
 
         try:
-            with (mido.MidiFile(filename, "r") if isinstance(filename, str) else filename) as mid:
+            with (mido.MidiFile(filename) if isinstance(filename, str) else filename) as mid:
                 if mid.type == 2:
                     raise complain.ComplainToUser(
                         "Type 2 (asynchronous) MIDI files are not supported.")
