@@ -15,7 +15,7 @@ def version_info():
                 pass
         return " ".join(versions)
     except:
-        return "???"
+        return "swood ??? (dependencies unknown)"
 
 
 def swoodlive_installed():
