@@ -147,7 +147,7 @@ for bitness in (32, 64):
         shutil.copy("template.nsi", "build/template.nsi")
     else:
         # NSIS for Linux doesn't recognize Unicode
-        with open("template.nsi") as inf, open("build/template.nsi") as outf:
+        with open("template.nsi") as inf, open("build/template.nsi", "w") as outf:
             for line in inf:
                 if "Unicode" in line:
                     outf.write("#" + line.replace("\r\n", "\n"))
