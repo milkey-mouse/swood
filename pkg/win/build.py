@@ -107,8 +107,12 @@ else:
                 outfile.write(line.replace("???", printed_ver))
 
 print("Adding _user_path patch")
-from nsist import _system_path
-with open(nsist._system_path.__file__) as syspath, open("pynsist_pkgs/_user_path.py", "w") as usrpath:
+try:
+    from nsist import _system_path
+    spf = nsist._system_path.__file__
+except:
+    spf = os.path.join(os.path.dirname(nsist.__file__), "_system_path.py")
+with open(spf) as syspath, open("pynsist_pkgs/_user_path.py", "w") as usrpath:
     for line in syspath:
         usrpath.write(syspath.read().replace(
             "allusers=True", "allusers=False"))
