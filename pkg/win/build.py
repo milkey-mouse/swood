@@ -10,8 +10,6 @@ import os
 
 # patch pyNSIST bug with wheel filename parsing
 
-# nsist.pypi.WheelDownloader.score_platform
-
 
 def pbw_patched(self, release_list):
     best_score = (0, 0, 0)
@@ -145,7 +143,16 @@ for bitness in (32, 64):
         shutil.rmtree("build")
     os.mkdir("build")
     shutil.copy("swood.ico", "build/swood.ico")
-    shutil.copy("template.nsi", "build/template.nsi")
+    if os.name == "nt":
+        shutil.copy("template.nsi", "build/template.nsi")
+    else:
+        # NSIS for Linux doesn't recognize Unicode
+        with open("template.nsi") as inf, open("build/template.nsi") as outf:
+            for line in inf:
+                if "Unicode" in line:
+                    outf.write("#" + line.replace("\r\n", "\n"))
+                else:
+                    outf.write(line.replace("\r\n", "\n"))
     nsist.InstallerBuilder(
         appname="swood",
         version=version,
