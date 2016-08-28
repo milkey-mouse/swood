@@ -149,9 +149,7 @@ for bitness in (32, 64):
         # NSIS for Linux doesn't recognize Unicode
         with open("template.nsi") as inf, open("build/template.nsi", "w") as outf:
             for line in inf:
-                if "Unicode" in line:
-                    outf.write(";" + line.replace("\r\n", "\n"))
-                else:
+                if "Unicode" not in line:
                     outf.write(line.replace("\r\n", "\n"))
     nsist.InstallerBuilder(
         appname="swood",
