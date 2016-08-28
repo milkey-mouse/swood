@@ -150,7 +150,7 @@ for bitness in (32, 64):
         with open("template.nsi") as inf, open("build/template.nsi", "w") as outf:
             for line in inf:
                 if "Unicode" in line:
-                    outf.write("#" + line.replace("\r\n", "\n"))
+                    outf.write(";" + line.replace("\r\n", "\n"))
                 else:
                     outf.write(line.replace("\r\n", "\n"))
     nsist.InstallerBuilder(
