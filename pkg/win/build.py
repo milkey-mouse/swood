@@ -165,7 +165,7 @@ for bitness in (32, 64):
         py_bitness=bitness,
         py_format="bundled",
         build_dir="./build",
-        nsi_template="template.nsi",
+        nsi_template="./build/template.nsi",
         installer_name=os.path.abspath(
             "../build/swood-{}-{}bit.exe".format(latest_commit if latest_commit is not None else version, bitness)),
         exclude=[]).run(makensis=True)
