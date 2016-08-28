@@ -106,6 +106,17 @@ else:
             for line in infile:
                 outfile.write(line.replace("???", printed_ver))
 
+print("Adding progressbar2")
+pb2_pkg = yarg.get("progressbar2").latest_release
+pkg_url = next(r.url for r in pb2_pkg if r.url.endswith(".tar.gz"))
+    r = requests.get(pkg_url, stream=True)
+    with open("progressbar2.tar.gz", 'wb') as f:
+        for chunk in r.iter_content(chunk_size=1024):
+            if chunk:  # filter out keep-alive new chunks
+                f.write(chunk)
+    with tarfile.open("progressbar2.tar.gz") as pkg_tar:
+        pkg_tar.extractall(path="pynsist_pkgs")
+
 print("Adding _user_path patch")
 try:
     from nsist import _system_path
