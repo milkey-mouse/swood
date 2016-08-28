@@ -18,7 +18,7 @@ def pbw_patched(self, release_list):
         if release.package_type != 'wheel':
             continue
 
-        *_, interpreter, abi, platform = release.filename[:-4].split("-")
+        interpreter, abi, platform = release.filename[:-4].split("-")[-3:]
 
         if abi.startswith(interpreter):  # e.g. cp35m
             abi = "abi3"
