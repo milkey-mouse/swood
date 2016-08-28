@@ -78,6 +78,7 @@ if os.path.isdir("pynsist_pkgs"):
     shutil.rmtree("pynsist_pkgs")
 os.mkdir("pynsist_pkgs")
 os.mkdir("pynsist_pkgs/swood")
+os.mkdir("pynsist_pkgs/progressbar")
 printed_ver = version + " (windows installer)"
 
 if "--stable" in sys.argv:
