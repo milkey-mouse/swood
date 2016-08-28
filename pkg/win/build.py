@@ -34,7 +34,10 @@ def pbw_patched(self, release_list):
             best = release
             best_score = score
 
-    print("Using wheel {}".format(best.filename))
+    try:
+        print("Using wheel {}".format(best.filename))
+    except:
+        pass  # let the exception handler in nsist handle it
     return best
 
 nsist.pypi.WheelDownloader.pick_best_wheel = pbw_patched
