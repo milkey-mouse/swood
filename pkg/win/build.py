@@ -160,7 +160,7 @@ for bitness in (32, 64):
         icon="swood.ico",
         shortcuts={},
         commands={"swood": {"entry_point": "swood:run_cmd"}},
-        packages=["progressbar"],
+        packages=[],
         pypi_wheel_reqs=["numpy==1.11.1", "Pillow==3.3.1", "mido==1.1.15",
                          "python-utils==2.0.0", "six==1.10.0", "pyFFTW==0.10.4"],
         extra_files=[],

@@ -120,7 +120,6 @@ Section "Uninstall"
   SetShellVarContext all
   Delete $INSTDIR\uninstall.exe
   Delete "$INSTDIR\${PRODUCT_ICON}"
-  RMDir /r "$INSTDIR\pkgs"
 
   ; Remove ourselves from %PATH%
   [% block uninstall_commands %]
@@ -128,6 +127,8 @@ Section "Uninstall"
     nsExec::ExecToLog '[[ python ]] -Es "$INSTDIR\pkgs\_user_path.py" remove "$INSTDIR\bin"'
   [% endif %]
   [% endblock uninstall_commands %]
+
+  RMDir /r "$INSTDIR\pkgs"
 
   ; Uninstall files
   [% for file, destination in ib.install_files %]
