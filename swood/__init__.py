@@ -31,8 +31,8 @@ def is_wav(f):
     return riff and wave
 
 
-def run_cmd(argv=sys.argv):
-    basename = os.path.basename(argv[0])
+def run_cmd(argv=sys.argv[1:]):
+    basename = os.path.basename(sys.argv[0])
     parser = argparse.ArgumentParser(prog="swood" if basename == "swood-script.py" else basename,
                                      description="swood.exe: the automatic ytpmv generator",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -67,7 +67,7 @@ def run_cmd(argv=sys.argv):
     parser.add_argument("--version", "-v", action="version", version=version_info(),
                         help="get the versions of swood and its dependencies")
 
-    args = parser.parse_args(argv[1:])
+    args = parser.parse_args(argv)
 
     from . import complain, midiparse, render, sample, soundfont
 
