@@ -39,6 +39,7 @@ class Instrument:
         self.noscale = noscale
         self.sample = sample
         self.volume = volume
+        self.pitch = pitch
         self.pan = pan
 
     def __hash__(self):
@@ -206,29 +207,40 @@ class SoundFont:
                     for instrument in affected_instruments:
                         try:
                             pan = float(value)
-                        except ValueError:
-                            raise SoundFontSyntaxError(
-                                linenum, raw_text, "'{}' is not a valid number".format(value))
                             if pan < 0 or pan > 1:
                                 raise SoundFontSyntaxError(
                                     linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range".format(value))
                             else:
                                 instrument.pan = pan
-                        instrument.pan = float(value)
+                        except ValueError:
+                            raise SoundFontSyntaxError(
+                                linenum, raw_text, "'{}' is not a valid number".format(value))
+                elif name == "pitch":
+                    for instrument in affected_instruments:
+                        try:
+                            pitch = float(value)
+                            if pan < 0:
+                                raise SoundFontSyntaxError(
+                                    linenum, raw_text, "'{}' is below 0".format(value))
+                            else:
+                                instrument.pitch = pitch
+                        except ValueError:
+                            raise SoundFontSyntaxError(
+                                linenum, raw_text, "'{}' is not a valid number".format(value))
                 elif name == "fullclip":
                     for instrument in affected_instruments:
-                        if value.lower() == "true":
+                        if value.lower() in ("true", "1"):
                             instrument.fullclip = True
-                        elif value.lower() == "false":
+                        elif value.lower() in ("false", "0"):
                             instrument.fullclip = False
                         else:
                             raise SoundFontSyntaxError(linenum, raw_text,
                                                        "fullclip must be 'True' or 'False'; '{}' is invalid".format(value))
                 elif name == "noscale":
                     for instrument in affected_instruments:
-                        if value.lower() == "true":
+                        if value.lower() in ("true", "1"):
                             instrument.noscale = True
-                        elif value.lower() == "false":
+                        elif value.lower() in ("false", "0"):
                             instrument.noscale = False
                         else:
                             raise SoundFontSyntaxError(linenum, raw_text,
@@ -246,12 +258,14 @@ class SoundFont:
         for fn in self.samples:
             loaded_samples[fn] = Sample(
                 self.wavpath(fn),
-                self._binsize
+                self._binsize,
             )
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
-                    instrument.sample = loaded_samples[instrument.sample]
+                    real_instrument = loaded_samples[instrument.sample]
+                    real_instrument.fundamental_freq = instrument.pitch
+                    instrument.sample = real_instrument
         self.add_samples(loaded_samples)
 
     def load_samples_from_zip(self):
@@ -261,7 +275,8 @@ class SoundFont:
                 with self.file.open(fn) as zipped_wav:
                     loaded_samples[fn] = Sample(zipped_wav, self._binsize)
             except KeyError:  # file not found in zip
-                    raise complain.ComplainToUser("Sample '{}' not found in config ZIP")
+                raise complain.ComplainToUser(
+                    "Sample '{}' not found in config ZIP")
         self.add_samples(loaded_samples)
 
     def add_samples(self, loaded_samples):

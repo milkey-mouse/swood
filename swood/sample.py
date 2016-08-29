@@ -18,13 +18,13 @@ class CalculatedFFT:
 class Sample:
     """Reads and analyzes WAV files."""
 
-    def __init__(self, filename, binsize=8192, volume=0.9):
+    def __init__(self, filename, binsize=8192, volume=0.9, fundamental_freq=None):
         self.binsize = binsize
 
         if binsize < 2:
             raise complain.ComplainToUser("FFT bin size must be at least 2.")
 
-        self._fundamental_freq = None
+        self._fundamental_freq = fundamental_freq
         self._fft = None
         self._img = None
 
