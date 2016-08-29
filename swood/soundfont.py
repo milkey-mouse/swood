@@ -34,7 +34,7 @@ class SoundFontSyntaxError(complain.ComplainToUser, SyntaxError):
 class Instrument:
     """Holds information about a MIDI instrument or track."""
 
-    def __init__(self, fullclip=False, noscale=False, sample=None, volume=0.9, pan=0.5):
+    def __init__(self, fullclip=False, noscale=False, sample=None, volume=0.9, pan=0.5, pitch=None):
         self.fullclip = fullclip
         self.noscale = noscale
         self.sample = sample
@@ -260,12 +260,6 @@ class SoundFont:
                 self.wavpath(fn),
                 self._binsize,
             )
-        for instruments in self.instruments.values():
-            for instrument in instruments:
-                if isinstance(instrument.sample, str):
-                    real_instrument = loaded_samples[instrument.sample]
-                    real_instrument.fundamental_freq = instrument.pitch
-                    instrument.sample = real_instrument
         self.add_samples(loaded_samples)
 
     def load_samples_from_zip(self):
@@ -280,6 +274,12 @@ class SoundFont:
         self.add_samples(loaded_samples)
 
     def add_samples(self, loaded_samples):
+        for instruments in self.instruments.values():
+            for instrument in instruments:
+                if isinstance(instrument.sample, str):
+                    real_instrument = loaded_samples[instrument.sample]
+                    real_instrument.fundamental_freq = instrument.pitch
+                    instrument.sample = real_instrument
         self.framerate = max(s.framerate for s in loaded_samples.values())
         self.channels = max(s.channels for s in loaded_samples.values())
         self.length = max(len(s) for s in loaded_samples.values())
