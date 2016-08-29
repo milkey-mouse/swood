@@ -8,10 +8,8 @@ import glob
 import sys
 import os
 
-# patch pyNSIST bug with wheel filename parsing
-
-
 def pbw_patched(self, release_list):
+    # patch pyNSIST bug with wheel filename parsing
     best_score = (0, 0, 0)
     best = None
     for release in release_list:
