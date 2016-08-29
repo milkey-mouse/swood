@@ -82,7 +82,7 @@ class MIDIParser:
                     if message.type == "note_on":  # ugh, string-typing
                         if message.channel == 10:
                             try:
-                                instrument = sample.percussion[message.note]
+                                instrument = sample.percussion[message.note][0]
                                 playing[message.note].append(
                                     Note(start=time_samples,
                                          volume=message.velocity * instrument.volume,
