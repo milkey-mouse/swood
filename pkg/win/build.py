@@ -8,6 +8,7 @@ import glob
 import sys
 import os
 
+
 def pbw_patched(self, release_list):
     # patch pyNSIST bug with wheel filename parsing
     best_score = (0, 0, 0)
@@ -140,6 +141,18 @@ if not os.path.isdir("../build"):
 
 for bitness in (32, 64):
     print("Building {}-bit version".format(bitness))
+
+    wheels = ["numpy==1.11.1", "mido==1.1.15",
+              "python-utils==2.0.0", "six==1.10.0", "pyFFTW==0.10.4"]
+    simd_filename = "pillow-simd-{}bit.tar.gz".format(bitness)
+    if os.path.isfile(simd_filename):
+        print("Using Pillow-SIMD")
+        with tarfile.open(simd_filename) as pkg_tar:
+            pkg_tar.extractall("pynsist_pkgs")
+    else:
+        print("Using non-accelerated Pillow. Run build_pillow-simd.py first for better performance.")
+        wheels.append("Pillow==3.3.1")
+
     if os.path.isdir("build"):
         shutil.rmtree("build")
     os.mkdir("build")
@@ -159,8 +172,7 @@ for bitness in (32, 64):
         shortcuts={},
         commands={"swood": {"entry_point": "swood:run_cmd"}},
         packages=[],
-        pypi_wheel_reqs=["numpy==1.11.1", "Pillow==3.3.1", "mido==1.1.15",
-                         "python-utils==2.0.0", "six==1.10.0", "pyFFTW==0.10.4"],
+        pypi_wheel_reqs=wheels,
         extra_files=[],
         py_version=latest_python,
         py_bitness=bitness,
