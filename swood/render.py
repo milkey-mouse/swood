@@ -197,3 +197,6 @@ class NoteRenderer:
             return output.channels
         else:
             output.save()
+
+        if pbar:
+            print()
