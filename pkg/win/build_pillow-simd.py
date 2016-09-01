@@ -48,7 +48,8 @@ with open("pillow-simd/setup.py") as infile, open("pillow-simd/setup.py.tmp", "w
         if line.startswith("        required ="):
             outfile.write("        required = set()\n")
         else:
-            outfile.write(line)
+            # visual c++ compiler seems to enable sse4 too with sse2 enabled
+            outfile.write(line.replace("-msse4", "/arch:SSE2"))
 shutil.move("pillow-simd/setup.py.tmp", "pillow-simd/setup.py")
 
 owd = os.getcwd()
@@ -71,4 +72,3 @@ with tarfile.open("pillow-simd-{}bit.tar.gz".format(bitness), "w") as out_tar:
             out_tar.add(fp, outp)
 
 shutil.rmtree("pillow-simd")
-# os.remove(tarball_fn)
