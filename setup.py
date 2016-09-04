@@ -172,7 +172,7 @@ if not simd:
 
 setup(
     name='swood',
-    version='1.0.3',
+    version='1.0.4',
     description='With just one sample and a MIDI you too can make YTPMVs',
     long_description='Are you tired of manually pitch-adjusting every sound for your shitposts? Toil no more with auto-placement of sound samples according to a MIDI!',
     url='https://meme.institute/swood',
