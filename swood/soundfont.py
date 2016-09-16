@@ -288,6 +288,7 @@ class SoundFont:
             samp._img = samp.img.resize(
                 (int(round(samp.img.size[0] * multiplier)), samp.channels),
                 resample=BILINEAR)
+            samp.framerate = self.framerate
         for instruments in self.instruments.values():
             for instrument in instruments:
                 if isinstance(instrument.sample, str):
