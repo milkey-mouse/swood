@@ -78,7 +78,7 @@ if os.path.isdir("pynsist_pkgs"):
     shutil.rmtree("pynsist_pkgs")
 os.mkdir("pynsist_pkgs")
 os.mkdir("pynsist_pkgs/swood")
-os.mkdir("pynsist_pkgs/progressbar")
+# os.mkdir("pynsist_pkgs/progressbar")
 printed_ver = version + " (windows installer)"
 
 if "--stable" in sys.argv:
@@ -107,23 +107,23 @@ else:
             for line in infile:
                 outfile.write(line.replace("???", printed_ver))
 
-print("Adding progressbar2 from sdist")
-pb2_pkg = yarg.get("progressbar2").latest_release
-pkg_url = next(r.url for r in pb2_pkg if r.url.endswith(".tar.gz"))
-r = requests.get(pkg_url, stream=True)
-with open("progressbar2.tar.gz", 'wb') as f:
-    for chunk in r.iter_content(chunk_size=1024):
-        if chunk:  # filter out keep-alive new chunks
-            f.write(chunk)
-with tarfile.open("progressbar2.tar.gz") as pkg_tar:
-    for fp in pkg_tar:
-        if fp.isfile() and "/progressbar/" in fp.name and fp.name.endswith(".py"):
-            outp = os.path.join("pynsist_pkgs/progressbar",
-                                os.path.basename(fp.name))
-            print("{} -> {}".format(fp.name, outp))
-            with open(outp, "wb") as out:
-                out.write(pkg_tar.extractfile(fp).read())
-os.remove("progressbar2.tar.gz")
+#print("Adding progressbar2 from sdist")
+#pb2_pkg = yarg.get("progressbar2").latest_release
+#pkg_url = next(r.url for r in pb2_pkg if r.url.endswith(".tar.gz"))
+#r = requests.get(pkg_url, stream=True)
+# with open("progressbar2.tar.gz", 'wb') as f:
+#    for chunk in r.iter_content(chunk_size=1024):
+#        if chunk:  # filter out keep-alive new chunks
+#            f.write(chunk)
+# with tarfile.open("progressbar2.tar.gz") as pkg_tar:
+#    for fp in pkg_tar:
+#        if fp.isfile() and "/progressbar/" in fp.name and fp.name.endswith(".py"):
+#            outp = os.path.join("pynsist_pkgs/progressbar",
+#                                os.path.basename(fp.name))
+#            print("{} -> {}".format(fp.name, outp))
+#            with open(outp, "wb") as out:
+#                out.write(pkg_tar.extractfile(fp).read())
+# os.remove("progressbar2.tar.gz")
 
 print("Adding _user_path patch")
 try:
@@ -142,7 +142,7 @@ if not os.path.isdir("../build"):
 for bitness in (32, 64):
     print("Building {}-bit version".format(bitness))
 
-    wheels = ["numpy==1.11.1", "mido==1.1.15",
+    wheels = ["numpy==1.11.1", "mido==1.1.15", "tqdm==4.8.4",
               "python-utils==2.0.0", "six==1.10.0", "pyFFTW==0.10.4"]
     simd_filename = "pillow-simd-{}bit.tar.gz".format(bitness)
     if os.path.isfile(simd_filename):

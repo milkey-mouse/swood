@@ -154,7 +154,7 @@ if len(sys.argv) > 1 and "install" in sys.argv:
     # apparently
     os.environ["CFLAGS"] = "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
 
-    for pkg in ("numpy", "pyfftw", "progressbar2"):
+    for pkg in ("numpy", "pyfftw"):
         if pkg not in pkgs:
             install_package(pkg)
 
@@ -165,7 +165,7 @@ if len(sys.argv) > 1 and "install" in sys.argv:
             print("SIMD support failed to install. swood will run slower.")
             simd = False
 
-reqs = ['mido', 'numpy', 'progressbar2', 'pyfftw']
+reqs = ['mido', 'numpy', 'tqdm', 'pyfftw']
 
 if not simd:
     reqs.append('pillow')
@@ -173,7 +173,7 @@ if not simd:
 setup(
     name='swood',
     version='1.0.4',
-    description='With just one sample and a MIDI you too can make YTPMVs',
+    description='Make music with any sound',
     long_description='Are you tired of manually pitch-adjusting every sound for your shitposts? Toil no more with auto-placement of sound samples according to a MIDI!',
     url='https://meme.institute/swood',
     author='Milkey Mouse',
