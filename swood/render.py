@@ -21,8 +21,12 @@ fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
 @staticmethod
 def patched_format_meter(*args, **kwargs):
     formatted_bar = old_format_meter(*args, **kwargs)
-    if ("ascii" in args or "ascii" in kwargs)
-    return formatted_bar.translate(fm_translation_table)
+    try:
+        parts = formatted_bar.split("|")
+        parts[1] = parts[1].translate(fm_translation_table)
+        return "|".join(parts)
+    except:
+        return formatted_bar
 
 tqdm.format_meter = patched_format_meter
 
@@ -156,11 +160,8 @@ class NoteRenderer:
 
         if pbar:
             bar = tqdm(total=midi.notecount, dynamic_ncols=True,
-                       bar_format="{desc}{percentage:3.0f}% |{bar}| ETA: {remaining}")
-            # bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(
-            #), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+                       bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
             update = bar.update
-            progress = 0
 
         # "inlining" these variables can speed up the lookup, making it faster
         # see https://stackoverflow.com/questions/37202463
@@ -194,9 +195,7 @@ class NoteRenderer:
                                  rendered_note.cutoffs,
                                  ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
                 if pbar:
-                    # increment progress bar
-                    progress += 1
-                    update(progress)
+                    update()
 
             if caching:
                 # cache "garbage collection":
