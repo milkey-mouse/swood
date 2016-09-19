@@ -1,6 +1,6 @@
-# ![swood.exe](https://raw.githubusercontent.com/milkey-mouse/swood/master/logo.png)
+# ![swood](https://raw.githubusercontent.com/milkey-mouse/swood/master/logo.png)
 
-Shitpost-O-Matic™
+See https://meme.institute/swood/
 
     pip install swood
     swood doot.wav megalovania.mid dootalovania.wav
