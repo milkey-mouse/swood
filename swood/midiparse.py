@@ -135,3 +135,56 @@ class MIDIParser:
         except IndexError:
             raise complain.ComplainToUser(
                 "This MIDI file is broken. Try opening it in MidiEditor (https://meme.institute/midieditor) and saving it back out again.")
+
+
+class LiveMIDIParser:
+    """Parses a MIDI file into a chronological list of notes."""
+
+    def __init__(self, sample, port=None, transpose=0):
+        # default to acoustic piano
+        self.channel_instruments = [sample.instruments[1][0], ] * 16
+        self.playing = collections.defaultdict(list)
+        self.transpose = transpose
+        self.sample = sample
+        self.port = port
+
+    def callback_factory(self, render_callback):
+        def callback(message):
+            if message.type == "note_on":
+                if message.channel == 10:
+                    try:
+                        instrument = self.sample.percussion[message.note][0]
+                        self.playing[message.note].append(
+                            Note(start=time_samples,
+                                 volume=message.velocity * instrument.volume,
+                                 instrument=instrument,
+                                 percussion=True))
+                        arr, cutoffs = render_callback(message.note)
+                        self.buffer
+                    except KeyError:
+                        print(
+                            "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note))
+            elif message.type == "note_off":
+                try:
+                    note = playing[message.note].pop()
+                except IndexError:  # the pop will fail if there aren't any matching notes playing
+                    print(
+                        "Warning: Note end event with no matching begin event @ {}".format(time))
+                if len(playing[message.note]) == 0:
+                    del playing[message.note]
+                # now stop the note in the compositor
+            elif message.type == "program_change":
+                self.channel_instruments[message.channel] = \
+                    self.sample.instruments[message.program + 1][0]
+
+    def eloop(self, render_callback):
+        cb = callback_factory(render_callback)
+        try:
+            midin = mido.open_input(
+                name=self.port, virtual=True, callback=cb)
+        except IOError:  # couldn't create virtual port
+            midin = mido.open_input(name=self.port, callback=cb)
+        except:
+            raise complain.ComplainToUser("Could not find a valid MIDI input")
+
+        midin.close()
