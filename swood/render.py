@@ -1,13 +1,30 @@
 """Renders music by pitch bending samples according to a MIDI."""
 
 from enum import Enum
+import string
 import math
+import os
 
-from PIL import Image
-import progressbar
 from numpy import zeros, full, asarray, resize, int32, int64
+from PIL import Image
+from tqdm import tqdm
 
 from . import wavout
+
+
+# monkey-patch tqdm to not do fractional chars with 0-9; it looks ugly
+
+old_format_meter = tqdm.format_meter
+fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
+
+
+@staticmethod
+def patched_format_meter(*args, **kwargs):
+    formatted_bar = old_format_meter(*args, **kwargs)
+    if ("ascii" in args or "ascii" in kwargs)
+    return formatted_bar.translate(fm_translation_table)
+
+tqdm.format_meter = patched_format_meter
 
 
 class CachedNote:
@@ -138,8 +155,10 @@ class NoteRenderer:
                 output_length, filename, self.sample.framerate, self.sample.channels)
 
         if pbar:
-            bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(
-            ), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
+            bar = tqdm(total=midi.notecount, dynamic_ncols=True,
+                       bar_format="{desc}{percentage:3.0f}% |{bar}| ETA: {remaining}")
+            # bar = progressbar.ProgressBar(widgets=[progressbar.Percentage(
+            #), " ", progressbar.Bar(), " ", progressbar.ETA()], max_value=midi.notecount)
             update = bar.update
             progress = 0
 
