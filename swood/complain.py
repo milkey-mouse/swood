@@ -1,5 +1,5 @@
 """User-friendly exception handler for swood."""
-
+import http.client
 import traceback
 import sys
 import os
@@ -37,7 +37,6 @@ class ComplaintFormatter(object):
                 print(
                     "Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
                 try:
-                    import http.client
                     conn = http.client.HTTPSConnection("meme.institute")
                     conn.request("POST", "/swood/bugs/submit", tb)
                     resp = conn.getresponse().read().decode("utf-8")
@@ -48,7 +47,6 @@ class ComplaintFormatter(object):
                     else:
                         raise Exception
                 except Exception:
-                    print(
-                        "Apparently we can't even send a bug report right. Sorry about that.")
+                    print("Submission of bug report failed.")
                     traceback.print_exc()
         return True

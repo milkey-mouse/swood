@@ -208,6 +208,9 @@ class NoteRenderer:
                         if time - notecache[k].length > cachesize and notecache[k].used < 3:
                             del notecache[k]
 
+        if pbar:
+            bar.close()
+
         if caching and clear_cache:
             notecache.clear()
 
