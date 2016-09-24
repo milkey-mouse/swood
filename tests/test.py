@@ -11,9 +11,11 @@ assert(os.path.realpath(swood.__file__) ==
 
 def find_program(prog):
     for path in os.environ["PATH"].split(os.pathsep):
-        vlc_location = os.path.join(path.strip('"'), prog)
-        if os.path.isfile(path):
-            return vlc_location, args
+        prog_location = os.path.join(path.strip('"'), prog)
+        if os.path.isfile(prog_location):
+            return prog_location
+        elif os.name == "nt" and os.path.isfile(prog_location + ".exe"):
+            return prog_location + ".exe"
     return None
 
 
