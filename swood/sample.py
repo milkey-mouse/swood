@@ -29,19 +29,37 @@ class Sample:
         self._img = None
 
         if isinstance(filename, str):
-            self.filename = str
+            self.filename = filename
         else:
             try:
-                self.filename = "<file handle {}>".format(filename.fileno())
+                try:
+                    self.filename = "<file '{}'>".format(filename.name)
+                except:
+                    self.filename = "<file handle {}>".format(filename.fileno())
             except:
                 self.filename = "<unknown file handle>"
 
-        self.wav = self.parse_wav(filename)
+        if isinstance(filename, str):
+            if filename.endswith(".wav"):
+                self.wav = self.parse_wav(filename)
+            else:
+                from . import ffmpeg
+                probed = ffmpeg.ffprobe(filename)
+                converted = ffmpeg.file_to_buffer(filename)
+                self.wav = self.parse_raw(converted, 4, probed.sample_rate, probed.channels)
+        else:
+            from . import ffmpeg
+            filename.seek(0)
+            probed = ffmpeg.ffprobe(filename)
+            filename.seek(0)
+            converted = ffmpeg.buffer_to_buffer(filename)
+            self.wav = self.parse_raw(converted, 4, probed.sample_rate, probed.channels)
+
 
         max_amplitude = int(max(max(abs(min(chan)), abs(max(chan)))
                                 for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
-
+        
     def parse_wav(self, filename):
         """Load a WAV file into a NumPy array."""
         try:
@@ -73,6 +91,31 @@ class Sample:
         except wave.Error:
             raise complain.ComplainToUser(
                 "This WAV type is not supported. Try opening the file in Audacity and exporting it as a standard WAV.")
+
+    def parse_raw(self, buf, sampwidth=4, framerate=44100, channels=2):
+        """Load raw PCM data into a NumPy array."""
+        self.sampwidth = sampwidth
+        self.framerate = framerate
+        self.channels = channels
+
+        framesize = channels * sampwidth
+        self.length = len(buf) // framesize
+
+        if self.sampwidth == 1:
+            self.size = np.int8
+        elif self.sampwidth == 2:
+            self.size = np.int16
+        elif self.sampwidth == 3 or self.sampwidth == 4:
+            self.size = np.int32
+        else:
+            raise ValueError("Sample width too high (max 4)")
+
+        wav = np.zeros((self.channels, self.length), dtype=self.size)
+        for i in range(self.length):
+            frame = buf[framesize * i:framesize * (i+1)]
+            for chan in range(self.channels):
+                wav[chan][i] = int.from_bytes(frame[self.sampwidth * chan:self.sampwidth * (chan + 1)], byteorder="little", signed=True)
+        return wav
 
     @property
     def fft(self):

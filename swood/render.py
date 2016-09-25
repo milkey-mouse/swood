@@ -1,7 +1,7 @@
 """Renders music by pitch bending samples according to a MIDI."""
 
 from enum import Enum
-import string
+import tempfile
 import math
 import os
 
@@ -11,25 +11,9 @@ from tqdm import tqdm
 
 from . import wavout
 
+from .__init__ import patch_tqdm
 
-# monkey-patch tqdm to not do fractional chars with 0-9; it looks ugly
-
-old_format_meter = tqdm.format_meter
-fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
-
-
-@staticmethod
-def patched_format_meter(*args, **kwargs):
-    formatted_bar = old_format_meter(*args, **kwargs)
-    try:
-        parts = formatted_bar.split("|")
-        parts[1] = parts[1].translate(fm_translation_table)
-        return "|".join(parts)
-    except:
-        return formatted_bar
-
-tqdm.format_meter = patched_format_meter
-
+patch_tqdm(tqdm)
 
 class CachedNote:
     """Holds pre-rendered versions of notes, tracking # of uses."""
@@ -151,73 +135,101 @@ class NoteRenderer:
             # it has to cut off sounds at the threshold anyway
             output_length = midi.length + self.threshold
 
-        if savetype == FileSaveType.SMART_CACHING:
-            output = wavout.CachedWavFile(
-                output_length, filename, self.sample.framerate, self.sample.channels)
-        else:
-            output = wavout.UncachedWavFile(
-                output_length, filename, self.sample.framerate, self.sample.channels)
-
-        if pbar:
-            bar = tqdm(total=midi.notecount, dynamic_ncols=True,
-                       bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
-            update = bar.update
-
-        # "inlining" these variables can speed up the lookup, making it faster
-        # see https://stackoverflow.com/questions/37202463
-        caching = self.cachesize > 0
-        add_data = output.add_data
-        maxvolume = midi.maxvolume
-        cachesize = self.cachesize
-
-        if caching:
-            tick = 8
-            notecache = self.notecache
-
-        for time, notes in midi.notes:
-            for note in notes:
-                if note in notecache:
-                    rendered_note = notecache[note]
-                    rendered_note.used += 1  # increment the used counter each time for the "GC" below
-                else:
-                    rendered_note = CachedNote(time, *self.render_note(note))
-                    notecache[note] = rendered_note
-                if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
-                    if note.instrument.pan == 0.5:
-                        add_data(time, rendered_note.data *
-                                 (note.volume / midi.maxvolume *
-                                  note.instrument.volume),
-                                 rendered_note.cutoffs)
+        try:
+            if savetype == FileSaveType.ARRAY_IN_MEM:
+                wav_filename = filename
+            else:
+                if isinstance(filename, str):
+                    if filename.endswith(".wav"):
+                        wav_filename = filename
                     else:
-                        add_data(time, rendered_note.data *
-                                 (note.volume / midi.maxvolume *
-                                  note.instrument.volume),
-                                 rendered_note.cutoffs,
-                                 ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
-                if pbar:
-                    update()
+                        wav_filename = tempfile.NamedTemporaryFile(delete=False)
+                else:
+                    try:
+                        if filename.name.endswith(".wav"):
+                            wav_filename = filename
+                        else:
+                            wav_filename = tempfile.NamedTemporaryFile(delete=False)
+                    except AttributeError:
+                        wav_filename = filename
+            if savetype == FileSaveType.SMART_CACHING:
+                output = wavout.CachedWavFile(output_length, wav_filename,
+                                            self.sample.framerate, self.sample.channels)
+            else:
+                output = wavout.UncachedWavFile(output_length, wav_filename,
+                                                self.sample.framerate, self.sample.channels)
+
+            if pbar:
+                bar = tqdm(total=midi.notecount, dynamic_ncols=True,
+                        bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
+                update = bar.update
+
+            # "inlining" these variables can speed up the lookup, making it faster
+            # see https://stackoverflow.com/questions/37202463
+            caching = self.cachesize > 0
+            add_data = output.add_data
+            maxvolume = midi.maxvolume
+            cachesize = self.cachesize
 
             if caching:
-                # cache "garbage collection":
-                # if a CachedNote is more than <cachesize> seconds old and not
-                # used >2 times it removes it from the cache to save mem(e)ory
-                tick += 1
-                if tick == 15:
-                    tick = 0
-                    for k in list(notecache.keys()):
-                        if time - notecache[k].length > cachesize and notecache[k].used < 3:
-                            del notecache[k]
+                tick = 8
+                notecache = self.notecache
 
-        if pbar:
-            bar.close()
+            for time, notes in midi.notes:
+                for note in notes:
+                    if note in notecache:
+                        rendered_note = notecache[note]
+                        rendered_note.used += 1  # increment the used counter each time for the "GC" below
+                    else:
+                        rendered_note = CachedNote(time, *self.render_note(note))
+                        notecache[note] = rendered_note
+                    if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
+                        if note.instrument.pan == 0.5:
+                            add_data(time, rendered_note.data *
+                                    (note.volume / midi.maxvolume *
+                                    note.instrument.volume),
+                                    rendered_note.cutoffs)
+                        else:
+                            add_data(time, rendered_note.data *
+                                    (note.volume / midi.maxvolume *
+                                    note.instrument.volume),
+                                    rendered_note.cutoffs,
+                                    ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
+                    if pbar:
+                        update()
 
-        if caching and clear_cache:
-            notecache.clear()
+                if caching:
+                    # cache "garbage collection":
+                    # if a CachedNote is more than <cachesize> seconds old and not
+                    # used >2 times it removes it from the cache to save mem(e)ory
+                    tick += 1
+                    if tick == 15:
+                        tick = 0
+                        for k in list(notecache.keys()):
+                            if time - notecache[k].length > cachesize and notecache[k].used < 3:
+                                del notecache[k]
 
-        if savetype == FileSaveType.ARRAY_IN_MEM:
-            return output.channels
-        else:
-            output.save()
+            if pbar:
+                bar.close()
 
-        if pbar:
-            print()
+            if caching and clear_cache:
+                notecache.clear()
+
+            if savetype == FileSaveType.ARRAY_IN_MEM:
+                return output.channels
+            else:
+                output.save()
+                if wav_filename != filename:
+                    from . import ffmpeg
+                    wav_filename.close()
+                    ffmpeg.file_to_file(wav_filename.name, filename)
+
+        finally:
+            if wav_filename != filename:
+                # there is a temp file for the wav, let's delete it
+                try:
+                    wav_filename.close()
+                finally:
+                    if os.path.isfile(wav_filename.name):
+                        os.remove(wav_filename.name)
+                

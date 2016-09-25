@@ -1,7 +1,29 @@
 import argparse
 import os.path
+import string
 import mido
 import sys
+
+
+def patch_tqdm(tqdm):
+    # monkey-patch tqdm to not do fractional chars with 0-9; it looks ugly
+    if "patched" not in vars(tqdm) or tqdm.patched == False:
+        old_format_meter = tqdm.format_meter
+        fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
+
+
+        @staticmethod
+        def patched_format_meter(*args, **kwargs):
+            formatted_bar = old_format_meter(*args, **kwargs)
+            try:
+                parts = formatted_bar.split("|")
+                parts[1] = parts[1].translate(fm_translation_table)
+                return "|".join(parts)
+            except:
+                return formatted_bar
+
+        tqdm.format_meter = patched_format_meter
+        tqdm.patched = True
 
 
 def version_info():
@@ -23,12 +45,13 @@ def swoodlive_installed():
     return importlib.util.find_spec("swoodlive") is not None
 
 
-def is_wav(f):
-    riff = f.read(4) == b"RIFF"
-    f.read(4)
-    wave = f.read(4) == b"WAVE"
-    f.seek(0)
-    return riff and wave
+def is_wav(filename):
+    with open(filename, "rb") as f:
+        riff = f.read(4) == b"RIFF"
+        f.read(4)
+        wave = f.read(4) == b"WAVE"
+        f.seek(0)
+        return riff and wave
 
 
 def run_cmd(argv=sys.argv[1:]):
@@ -37,12 +60,12 @@ def run_cmd(argv=sys.argv[1:]):
                                      description="swood.exe: the automatic ytpmv generator",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument("infile", type=argparse.FileType("rb"),
+    parser.add_argument("infile", type=str,
                         help="a short wav file to sample as the instrument, or a swood config file")
     # type=mido.MidiFile works too, but throws more obscure errors
     parser.add_argument("midi", type=str,
                         help="the MIDI to play with the wav sample")
-    parser.add_argument("output", type=argparse.FileType("wb"),
+    parser.add_argument("output", type=str,
                         help="path for the output wav file")
 
     parser.add_argument("--transpose", "-t", type=int,
@@ -76,17 +99,21 @@ def run_cmd(argv=sys.argv[1:]):
             sample = soundfont.DefaultFont(
                 sample.Sample(args.infile, args.binsize))
         else:
-            config_options = {}
-            sample = soundfont.SoundFont(
-                args.infile, config_options, binsize=args.binsize)
-            # ensure cli args take precedence over config by
-            # only changing arguments currently at their default
-            for name, value in config_options.items():
-                for option in parser._actions:
-                    if option.dest == name:
-                        if option.default == vars(args)[name]:
-                            vars(args)[name] = value
-                        break
+            try:
+                config_options = {}
+                sample = soundfont.SoundFont(
+                    args.infile, config_options, binsize=args.binsize)
+                # ensure cli args take precedence over config by
+                # only changing arguments currently at their default
+                for name, value in config_options.items():
+                    for option in parser._actions:
+                        if option.dest == name:
+                            if option.default == vars(args)[name]:
+                                vars(args)[name] = value
+                            break
+            except:
+                sample = soundfont.DefaultFont(
+                    sample.Sample(args.infile, args.binsize))
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
