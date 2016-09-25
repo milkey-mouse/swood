@@ -132,7 +132,13 @@ class SoundFont:
     def parse(self, config):
         affected_instruments = []
         parse_arguments = None
+        first_line = True
         for linenum, raw_text in enumerate(config.replace("\r\n", "\n").split("\n")):
+            if first_line:
+                if not (raw_text.startswith("# swood") or raw_text.startswith("#swood")):
+                    raise SoundFontSyntaxError(linenum, raw_text, "first line needs to start with '# swood'")
+                first_line = False
+                continue
             text = self.strip_comments(raw_text)
             if text == "":
                 continue
