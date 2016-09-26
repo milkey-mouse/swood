@@ -4,7 +4,6 @@ import http.client
 import subprocess
 import platform
 import tempfile
-import stat
 import sys
 import os
 
@@ -113,9 +112,7 @@ def download_ffmpeg():
                             else:
                                 break
                     # set execution bits
-                    st = os.stat(os.path.expanduser("~/.swood/ffmpeg"))
                     os.chmod(os.path.expanduser("~/.swood/ffmpeg"), 0o700)
-                    st = os.stat(os.path.expanduser("~/.swood/ffprobe"))
                     os.chmod(os.path.expanduser("~/.swood/ffprobe"), 0o700)
             return os.path.expanduser("~/.swood/ffmpeg"), os.path.expanduser("~/.swood/ffprobe")
 
