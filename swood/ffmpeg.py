@@ -4,8 +4,9 @@ import http.client
 import subprocess
 import platform
 import tempfile
-import os.path
+import stat
 import sys
+import os
 
 from .__init__ import patch_tqdm
 from . import complain
@@ -86,23 +87,37 @@ def download_ffmpeg():
             return os.path.join(swood_appdata, "ffmpeg.exe"), os.path.join(swood_appdata, "ffprobe.exe")
         elif os.name == "posix":
             import tarfile
-            with tarfile.TarFile(ffmpeg_zip) as tf:
+            if not os.path.isdir(os.path.expanduser("~/.swood")):
+                os.mkdir(os.path.expanduser("~/.swood"))
+            with tarfile.open(mode="r:xz", fileobj=ffmpeg_zip) as tf:
                 try:
                     ffmpeg_bin = next(fn for fn in tf.getmembers() if fn.name.endswith("ffmpeg"))
+                    ffprobe_bin = next(fn for fn in tf.getmembers() if fn.name.endswith("ffprobe"))
                 except StopIteration:
                     raise complain.ComplainToUser("Could not find ffmpeg/ffprobe binary in tarball")
-                with tqdm(desc="Extracting ffmpeg", total=ffmpeg_bin.size, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
-                    if not os.path.isdir("/var/swood"):
-                        os.mkdir("/var/swood")
-                    with tf.open(ffmpeg_exe) as zipped_exe, open("/var/swood/ffmpeg", "wb") as unzipped_exe:
+                with tqdm(desc="Extracting ffmpeg", total=ffmpeg_bin.size + ffprobe_bin.size, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
+                    with tf.extractfile(ffmpeg_bin) as zipped_exe, open(os.path.expanduser("~/.swood/ffmpeg"), "wb") as unzipped_exe:
                         while True:
                             buf = zipped_exe.read(4096)
                             if buf:
                                 unzipped_exe.write(buf)
-                                pbar.update(4096)
+                                pbar.update(len(buf))
                             else:
                                 break
-            return "/var/swood/ffmpeg", "/var/swood/ffprobe"
+                    with tf.extractfile(ffprobe_bin) as zipped_exe, open(os.path.expanduser("~/.swood/ffprobe"), "wb") as unzipped_exe:
+                        while True:
+                            buf = zipped_exe.read(4096)
+                            if buf:
+                                unzipped_exe.write(buf)
+                                pbar.update(len(buf))
+                            else:
+                                break
+                    # set execution bits
+                    st = os.stat(os.path.expanduser("~/.swood/ffmpeg"))
+                    os.chmod(os.path.expanduser("~/.swood/ffmpeg"), 0o700)
+                    st = os.stat(os.path.expanduser("~/.swood/ffprobe"))
+                    os.chmod(os.path.expanduser("~/.swood/ffprobe"), 0o700)
+            return os.path.expanduser("~/.swood/ffmpeg"), os.path.expanduser("~/.swood/ffprobe")
 
 ffmpeg_path = find_program("ffmpeg")
 ffprobe_path = find_program("ffprobe")
@@ -110,9 +125,9 @@ if ffmpeg_path is None or ffprobe_path is None:
     if os.path.isfile(os.path.expanduser("~/AppData/Local/swood/ffmpeg.exe")) and os.path.isfile(os.path.expanduser("~/AppData/Local/swood/ffprobe.exe")):
         ffmpeg_path = os.path.expanduser("~/AppData/Local/swood/ffmpeg.exe")
         ffprobe_path = os.path.expanduser("~/AppData/Local/swood/ffprobe.exe")
-    elif os.path.isfile("/var/swood/ffmpeg") and os.path.isfile("/var/swood/ffprobe"):
-        ffmpeg_path = "/var/swood/ffmpeg"
-        ffprobe_path = "/var/swood/ffprobe"
+    elif os.path.isfile(os.path.expanduser("~/.swood/ffmpeg")) and os.path.isfile(os.path.expanduser("~/.swood/ffprobe")):
+        ffmpeg_path = os.path.expanduser("~/.swood/ffmpeg")
+        ffprobe_path = os.path.expanduser("~/.swood/ffprobe")
     else:
         ffmpeg_path, ffprobe_path = download_ffmpeg()
 else:
