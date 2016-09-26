@@ -5,6 +5,7 @@ import subprocess
 import platform
 import tempfile
 import sys
+import ssl
 import os
 
 from .__init__ import patch_tqdm
@@ -26,94 +27,98 @@ def find_program(prog):
 
 def download_ffmpeg():
     with tempfile.TemporaryFile() as ffmpeg_zip:
-        if os.name == "nt":
-            conn = http.client.HTTPSConnection("ffmpeg.zeranoe.com")
-            if platform.architecture()[0] == "64bit":
-                conn.request("GET", "/builds/win64/static/ffmpeg-latest-win64-static.zip")
-            elif platform.architecture()[0] == "32bit":
-                conn.request("GET", "/builds/win64/static/ffmpeg-latest-win32-static.zip")
-            else:
-                raise complain.ComplainToUser("Can't detect architecture")
-        elif os.name == "posix":
-            conn = http.client.HTTPSConnection("johnvansickle.com")
-            if platform.architecture()[0] == "64bit":
-                conn.request("GET", "/ffmpeg/builds/ffmpeg-git-64bit-static.tar.xz")
-            elif platform.architecture()[0] == "32bit":
-                conn.request("GET", "/ffmpeg/builds/ffmpeg-git-32bit-static.tar.xz")
-            else:
-                raise complain.ComplainToUser("Can't detect architecture")
-        else:
-            raise complain.ComplainToUser("Can't detect OS")
-        resp = conn.getresponse()
-        zip_len = int(resp.getheader("content-length"))
-        with tqdm(desc="Downloading ffmpeg", total=zip_len, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
-            while True:
-                buf = resp.read(4096)
-                if buf:
-                    ffmpeg_zip.write(buf)
-                    pbar.update(4096)
+        try:
+            if os.name == "nt":
+                conn = http.client.HTTPSConnection("ffmpeg.zeranoe.com")
+                if platform.architecture()[0] == "64bit":
+                    conn.request("GET", "/builds/win64/static/ffmpeg-latest-win64-static.zip")
+                elif platform.architecture()[0] == "32bit":
+                    conn.request("GET", "/builds/win64/static/ffmpeg-latest-win32-static.zip")
                 else:
-                    break
+                    raise complain.ComplainToUser("Can't detect architecture")
+            elif os.name == "posix":
+                conn = http.client.HTTPSConnection("johnvansickle.com")
+                if platform.architecture()[0] == "64bit":
+                    conn.request("GET", "/ffmpeg/builds/ffmpeg-git-64bit-static.tar.xz")
+                elif platform.architecture()[0] == "32bit":
+                    conn.request("GET", "/ffmpeg/builds/ffmpeg-git-32bit-static.tar.xz")
+                else:
+                    raise complain.ComplainToUser("Can't detect architecture")
+            else:
+                raise complain.ComplainToUser("Can't detect OS")
+            resp = conn.getresponse()
+            zip_len = int(resp.getheader("content-length"))
+            with tqdm(desc="Downloading ffmpeg", total=zip_len, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
+                while True:
+                    buf = resp.read(4096)
+                    if buf:
+                        ffmpeg_zip.write(buf)
+                        pbar.update(4096)
+                    else:
+                        break
+        except ssl.SSLError:
+            raise complain.ComplainToUser("The SSL certificate for the ffmpeg server is invalid. Someone might be doing something nasty!")
+        except ConnectionError:
+            raise complain.ComplainToUser("There was an error while connecting to the server. Try again later.")
+        except http.client.HTTPException:
+            raise complain.ComplainToUser("An unknown error occurred while downloading ffmpeg.")
         ffmpeg_zip.seek(0)
+
+        files_to_extract = ("ffmpeg", "ffprobe")
+
+        nt = (os.name == "nt")
+        if nt: files_to_extract = tuple(map(lambda x: x + ".exe", files_to_extract))
+        swood_appdata = os.path.expanduser("~/AppData/Local/swood" if nt else "~/.swood")
+        if not os.path.isdir(swood_appdata):
+            os.mkdir(swood_appdata)
         if os.name == "nt":
             import zipfile
-            with zipfile.ZipFile(ffmpeg_zip) as zf:
-                swood_appdata = os.path.expanduser("~/AppData/Local/swood")
-                if not os.path.isdir(swood_appdata):
-                    os.mkdir(swood_appdata)
-                try:
-                    ffmpeg_exe = next(fn for fn in zf.infolist() if fn.filename.endswith("ffmpeg.exe"))
-                    ffprobe_exe = next(fn for fn in zf.infolist() if fn.filename.endswith("ffprobe.exe"))
-                except StopIteration:
-                    raise complain.ComplainToUser("Could not find ffmpeg binary in zip file")
-                with tqdm(desc="Extracting ffmpeg", total=ffmpeg_exe.file_size + ffprobe.file_size, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
-                    with zf.open(ffmpeg_exe) as zipped_exe, open(os.path.join(swood_appdata, "ffmpeg.exe"), "wb") as unzipped_exe:
-                        while True:
-                            buf = zipped_exe.read(4096)
-                            if buf:
-                                unzipped_exe.write(buf)
-                                pbar.update(len(buf))
-                            else:
-                                break
-                    with zf.open(ffprobe_exe) as zipped_exe, open(os.path.join(swood_appdata, "ffprobe.exe"), "wb") as unzipped_exe:
-                        while True:
-                            buf = zipped_exe.read(4096)
-                            if buf:
-                                unzipped_exe.write(buf)
-                                pbar.update(len(buf))
-                            else:
-                                break
+            try:
+                with tqdm(desc="Searching archive", dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
+                    with zipfile.ZipFile(ffmpeg_zip) as zf:
+                        binaries = tuple(fn for fn in zf.infolist() if any(map(fn.filename.endswith, files_to_extract)))
+                        if len(binaries) < 2:
+                            raise complain.ComplainToUser("Could not find ffmpeg/ffprobe in archive")
+                        pbar.total = sum(fn.file_size for fn in binaries)
+                        for fn in binaries:
+                            extracted_name = os.path.basename(fn.filename)
+                            pbar.desc = "Extracting '{}'".format(extracted_name)
+                            with zf.open(fn) as zipped, open(os.path.join(swood_appdata, extracted_name), "wb") as unzipped:
+                                while True:
+                                    buf = zipped.read(4096)
+                                    if buf:
+                                        unzipped.write(buf)
+                                        pbar.update(len(buf))
+                                    else:
+                                        break
+            except zipfile.BadZipFile:
+                raise complain.ComplainToUser("Zip file is corrupted")
+            
             return os.path.join(swood_appdata, "ffmpeg.exe"), os.path.join(swood_appdata, "ffprobe.exe")
         elif os.name == "posix":
             import tarfile
-            if not os.path.isdir(os.path.expanduser("~/.swood")):
-                os.mkdir(os.path.expanduser("~/.swood"))
-            with tarfile.open(mode="r:xz", fileobj=ffmpeg_zip) as tf:
-                try:
-                    ffmpeg_bin = next(fn for fn in tf.getmembers() if fn.name.endswith("ffmpeg"))
-                    ffprobe_bin = next(fn for fn in tf.getmembers() if fn.name.endswith("ffprobe"))
-                except StopIteration:
-                    raise complain.ComplainToUser("Could not find ffmpeg/ffprobe binary in tarball")
-                with tqdm(desc="Extracting ffmpeg", total=ffmpeg_bin.size + ffprobe_bin.size, dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
-                    with tf.extractfile(ffmpeg_bin) as zipped_exe, open(os.path.expanduser("~/.swood/ffmpeg"), "wb") as unzipped_exe:
-                        while True:
-                            buf = zipped_exe.read(4096)
-                            if buf:
-                                unzipped_exe.write(buf)
-                                pbar.update(len(buf))
-                            else:
-                                break
-                    with tf.extractfile(ffprobe_bin) as zipped_exe, open(os.path.expanduser("~/.swood/ffprobe"), "wb") as unzipped_exe:
-                        while True:
-                            buf = zipped_exe.read(4096)
-                            if buf:
-                                unzipped_exe.write(buf)
-                                pbar.update(len(buf))
-                            else:
-                                break
-                    # set execution bits
-                    os.chmod(os.path.expanduser("~/.swood/ffmpeg"), 0o700)
-                    os.chmod(os.path.expanduser("~/.swood/ffprobe"), 0o700)
+            try:
+                with tqdm(desc="Searching archive", dynamic_ncols=True, unit="B", unit_scale=True) as pbar:
+                    with tarfile.open(fileobj=ffmpeg_zip, mode="r:xz") as tf:
+                        binaries = tuple(fn for fn in tf.getmembers() if any(map(fn.name.endswith, files_to_extract)))
+                        if len(binaries) < 2:
+                            raise complain.ComplainToUser("Could not find ffmpeg/ffprobe in archive")
+                        pbar.total = sum(fn.size for fn in binaries)
+                        for fn in binaries:
+                            extracted_name = os.path.basename(fn.name)
+                            pbar.desc = "Extracting '{}'".format(extracted_name)
+                            with tf.extractfile(fn) as zipped, open(os.path.join(swood_appdata, extracted_name), "wb") as unzipped:
+                                while True:
+                                    buf = zipped.read(4096)
+                                    if buf:
+                                        unzipped.write(buf)
+                                        pbar.update(len(buf))
+                                    else:
+                                        break
+                            # set execution bits
+                            os.chmod(os.path.join(swood_appdata, extracted_name), 0o700)
+            except tarfile.ExtractError:
+                raise complain.ComplainToUser("Tarball can't be extracted")
             return os.path.expanduser("~/.swood/ffmpeg"), os.path.expanduser("~/.swood/ffprobe")
 
 ffmpeg_path = find_program("ffmpeg")
@@ -133,7 +138,14 @@ else:
         print("Using ffprobe from PATH ({})".format(ffprobe_path))
 
 class AudioInfo:
-    pass
+    def __getitem__(self, key):
+        return vars(self)[key]
+
+    def __setitem__(self, key, val):
+        vars(self)[key] = val
+    
+    def __delitem__(self, key):
+        del vars(self)[key]
 
 def ffprobe(filename):
     if isinstance(filename, str):
@@ -153,12 +165,12 @@ def ffprobe(filename):
         elif stream:
             k, v = line.split("=")
             try:
-                vars(ai)[k] = int(v)
+                ai[k] = int(v)
             except ValueError:
                 try:
-                    vars(ai)[k] = float(v)
+                    ai[k] = float(v)
                 except ValueError:
-                    vars(ai)[k] = v
+                    ai[k] = v
     return ai
 
 def run_ffmpeg(*args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=None, check=True, popen=False, **kwargs):
