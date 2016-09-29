@@ -183,7 +183,7 @@ def run_ffmpeg(*args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stder
     else:
         ff_stderr = subprocess.DEVNULL
     if popen:
-        return subprocess.Popen(cmd, stdin=stdin, stdout=stdout, stderr=ff_stderr, check=check, **kwargs)
+        return subprocess.Popen(cmd, stdin=stdin, stdout=stdout, stderr=ff_stderr, **kwargs)
     else:
         return subprocess.run(cmd, stdin=stdin, stdout=stdout, stderr=ff_stderr, check=check, **kwargs)
         
@@ -198,3 +198,41 @@ def file_to_buffer(infile, format="s32le"):
 
 def file_to_file(infile, outfile):
     run_ffmpeg("-i", infile, outfile)
+
+class VideoFile:
+    def __init__(self, filename, width=1920, height=1080, fps=30):
+        self.size = (width, height)
+        resolution = "{}x{}".format(*self.size)
+        # take in raw 24bpp RGB data (PIL has no encoders)
+        # and output the default format for <filename>
+        self.ffproc = run_ffmpeg("-f", "rawvideo", "-pix_fmt", "rgb24",
+                                 "-s:v", resolution, "-r", str(fps), "-i", "-",
+                                 filename, stdin=subprocess.PIPE, popen=True)
+
+    def write(self, im):
+        if im.size != self.size:
+            raise ValueError("Wrong resolution for video ({}x{} needed)".format(*self.size))
+        if im.mode == "RGB":
+            self.ffproc.stdin.write(im.tobytes())
+        else:
+            self.ffproc.stdin.write(im.convert("RGB").tobytes())            
+
+    def close(self):
+        if self.ffproc is not None and self.ffproc.poll() is None:
+            try:
+                self.ffproc.stdin.close()
+            except:
+                pass
+            try:
+                self.ffproc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+            self.ffproc.terminate()
+            self.ffproc = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return True
