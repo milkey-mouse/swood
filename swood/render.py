@@ -15,6 +15,7 @@ from .__init__ import patch_tqdm
 
 patch_tqdm(tqdm)
 
+
 class CachedNote:
     """Holds pre-rendered versions of notes, tracking # of uses."""
 
@@ -143,25 +144,27 @@ class NoteRenderer:
                     if filename.endswith(".wav"):
                         wav_filename = filename
                     else:
-                        wav_filename = tempfile.NamedTemporaryFile(delete=False)
+                        wav_filename = tempfile.NamedTemporaryFile(
+                            delete=False)
                 else:
                     try:
                         if filename.name.endswith(".wav"):
                             wav_filename = filename
                         else:
-                            wav_filename = tempfile.NamedTemporaryFile(delete=False)
+                            wav_filename = tempfile.NamedTemporaryFile(
+                                delete=False)
                     except AttributeError:
                         wav_filename = filename
             if savetype == FileSaveType.SMART_CACHING:
                 output = wavout.CachedWavFile(output_length, wav_filename,
-                                            self.sample.framerate, self.sample.channels)
+                                              self.sample.framerate, self.sample.channels)
             else:
                 output = wavout.UncachedWavFile(output_length, wav_filename,
                                                 self.sample.framerate, self.sample.channels)
 
             if pbar:
                 bar = tqdm(total=midi.notecount, dynamic_ncols=True,
-                        bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
+                           bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
                 update = bar.update
 
             # "inlining" these variables can speed up the lookup, making it faster
@@ -181,27 +184,29 @@ class NoteRenderer:
                         rendered_note = notecache[note]
                         rendered_note.used += 1  # increment the used counter each time for the "GC" below
                     else:
-                        rendered_note = CachedNote(time, *self.render_note(note))
+                        rendered_note = CachedNote(
+                            time, *self.render_note(note))
                         notecache[note] = rendered_note
                     if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
                         if note.instrument.pan == 0.5:
                             add_data(time, rendered_note.data *
-                                    (note.volume / midi.maxvolume *
-                                    note.instrument.volume),
-                                    rendered_note.cutoffs)
+                                     (note.volume / midi.maxvolume *
+                                      note.instrument.volume),
+                                     rendered_note.cutoffs)
                         else:
                             add_data(time, rendered_note.data *
-                                    (note.volume / midi.maxvolume *
-                                    note.instrument.volume),
-                                    rendered_note.cutoffs,
-                                    ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
+                                     (note.volume / midi.maxvolume *
+                                      note.instrument.volume),
+                                     rendered_note.cutoffs,
+                                     ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
                     if pbar:
                         update()
 
                 if caching:
                     # cache "garbage collection":
                     # if a CachedNote is more than <cachesize> seconds old and not
-                    # used >2 times it removes it from the cache to save mem(e)ory
+                    # used >2 times it removes it from the cache to save
+                    # mem(e)ory
                     tick += 1
                     if tick == 15:
                         tick = 0
@@ -232,4 +237,3 @@ class NoteRenderer:
                 finally:
                     if os.path.isfile(wav_filename.name):
                         os.remove(wav_filename.name)
-                

@@ -6,6 +6,7 @@ import os
 
 __file__ = os.path.abspath(__file__)
 
+
 class ComplainToUser(Exception):
     """When used with ComplaintFormatter, tells the user what error (of theirs) caused the failure and exits."""
     pass
@@ -26,7 +27,8 @@ def can_submit():
         except:
             pass
     while True:
-        resp = input("Something went wrong. Do you want to send an anonymous bug report? (Type Y or N): ").lower()
+        resp = input(
+            "Something went wrong. Do you want to send an anonymous bug report? (Type Y or N): ").lower()
         if resp in ("yes", "y", "true"):
             try:
                 with open(sbpath, "w") as sb:
@@ -43,7 +45,7 @@ def can_submit():
             return 0
 
 
-class ComplaintFormatter(object):
+class ComplaintFormatter:
     """Notifies the user when the program fails predictably and uploads bug reports.
 
     When used in a with statement, ComplaintFormatter catches all exceptions. If the
@@ -52,6 +54,9 @@ class ComplaintFormatter(object):
     actual, unexpected exception), it will upload the traceback to the swood debug
     server (unless the user has opted out of sending bug reports.)
     """
+
+    def __init__(self, version=None):
+        self.version = version
 
     def __enter__(self):
         pass
@@ -65,27 +70,38 @@ class ComplaintFormatter(object):
             # also normalizes the paths, helping to detect dupes
             scrubbed_stack = traceback.extract_tb(tb)
             # cut off traces of stuff that isn't ours
-            others_cutoff = next(idx for idx, fs in enumerate(scrubbed_stack) if os.path.samefile(os.path.dirname(fs.filename), os.path.dirname(__file__)))
+            others_cutoff = next(idx for idx, fs in enumerate(scrubbed_stack) if os.path.samefile(
+                os.path.dirname(fs.filename), os.path.dirname(__file__)))
             scrubbed_stack = scrubbed_stack[others_cutoff:]
-            # rewrite paths so they contain only relative directories (hides username on Windows)
-            dirstart = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            # rewrite paths so they contain only relative directories (hides
+            # username on Windows)
+            dirstart = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), ".."))
             for fs in scrubbed_stack:
-                fs.filename = os.path.relpath(fs.filename, start=dirstart).replace("\\", "/")
+                fs.filename = os.path.relpath(
+                    fs.filename, start=dirstart).replace("\\", "/")
             str_tb = "Traceback (most recent call last):\n" + \
                 "".join(traceback.format_list(scrubbed_stack)) + \
                 "".join(traceback.format_exception_only(exc_type, exc))
 
+            if self.version is not None:
+                str_tb = "# " + self.version + "\n" + str_tb
+
             if "--optout" in sys.argv or "-o" in sys.argv:
-                print("Something went wrong. A bug report will not be sent because of your command-line flag.")
+                print(
+                    "Something went wrong. A bug report will not be sent because of your command-line flag.")
                 return False
             elif os.environ.get("SWOOD_OPTOUT") == "1":
-                print("Something went wrong. A bug report will not be sent because of your environment variable.")
+                print(
+                    "Something went wrong. A bug report will not be sent because of your environment variable.")
                 return False
             elif not can_submit():
-                print("Something went wrong. A bug report will not be sent because of your config setting.")
+                print(
+                    "Something went wrong. A bug report will not be sent because of your config setting.")
                 return False
             else:
-                print("Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
+                print(
+                    "Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
                 try:
                     conn = http.client.HTTPSConnection("meme.institute")
                     conn.request("POST", "/swood/bugs/submit", str_tb)

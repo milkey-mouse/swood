@@ -11,7 +11,6 @@ def patch_tqdm(tqdm):
         old_format_meter = tqdm.format_meter
         fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
 
-
         @staticmethod
         def patched_format_meter(*args, **kwargs):
             formatted_bar = old_format_meter(*args, **kwargs)
@@ -38,20 +37,6 @@ def version_info():
         return " ".join(versions)
     except:
         return "swood ??? (dependencies unknown)"
-
-
-def swoodlive_installed():
-    import importlib.util
-    return importlib.util.find_spec("swoodlive") is not None
-
-
-def is_wav(filename):
-    with open(filename, "rb") as f:
-        riff = f.read(4) == b"RIFF"
-        f.read(4)
-        wave = f.read(4) == b"WAVE"
-        f.seek(0)
-        return riff and wave
 
 
 def run_cmd(argv=sys.argv[1:]):
@@ -81,39 +66,39 @@ def run_cmd(argv=sys.argv[1:]):
     parser.add_argument("--no-pbar", "-p", action="store_false",
                         help=argparse.SUPPRESS)
 
-    if swoodlive_installed():
-        parser.add_argument("--live",
-                            help="listen on a midi input and generate the output in realtime")
+    version = version_info()
 
     parser.add_argument("--optout", "-o", action="store_true",
                         help="opt out of automatic bug reporting (or set the env variable SWOOD_OPTOUT)")
-    parser.add_argument("--version", "-v", action="version", version=version_info(),
+    parser.add_argument("--version", "-v", action="version", version=version,
                         help="get the versions of swood and its dependencies")
 
     args = parser.parse_args(argv)
 
     from . import complain, midiparse, render, sample, soundfont
 
-    with complain.ComplaintFormatter():
-        if is_wav(args.infile):
+    with complain.ComplaintFormatter(version=version):
+        if sample.is_wav(args.infile):
+            # load wav file natively
             sample = soundfont.DefaultFont(
                 sample.Sample(args.infile, args.binsize))
+        elif "." in args.infile and args.infile.split(".")[-1] in ("swood", "ini", "txt", ".soundfont"):
+            # it's a known soundfont extension, so load it as such
+            config_options = {}
+            sample = soundfont.SoundFont(
+                args.infile, config_options, binsize=args.binsize)
+            # ensure cli args take precedence over config
+            # by only changing arguments currently at their default
+            for name, value in config_options.items():
+                for option in parser._actions:
+                    if option.dest == name:
+                        if option.default == vars(args)[name]:
+                            vars(args)[name] = value
+                        break
         else:
-            try:
-                config_options = {}
-                sample = soundfont.SoundFont(
-                    args.infile, config_options, binsize=args.binsize)
-                # ensure cli args take precedence over config by
-                # only changing arguments currently at their default
-                for name, value in config_options.items():
-                    for option in parser._actions:
-                        if option.dest == name:
-                            if option.default == vars(args)[name]:
-                                vars(args)[name] = value
-                            break
-            except:
-                sample = soundfont.DefaultFont(
-                    sample.Sample(args.infile, args.binsize))
+            # use ffmpeg to convert to a supported format
+            sample = soundfont.DefaultFont(
+                sample.Sample(args.infile, args.binsize))
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)

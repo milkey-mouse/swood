@@ -15,6 +15,18 @@ class CalculatedFFT:
         self.spacing = spacing
 
 
+def is_wav(f):
+    if isinstance(f, str):
+        with open(f, "rb") as fobj:
+            return is_wav(fobj)
+
+    riff = f.read(4) == b"RIFF"
+    f.read(4)
+    wave = f.read(4) == b"WAVE"
+    f.seek(0)
+    return riff and wave
+
+
 class Sample:
     """Reads and analyzes WAV files."""
 
@@ -25,41 +37,31 @@ class Sample:
             raise complain.ComplainToUser("FFT bin size must be at least 2.")
 
         self._fundamental_freq = fundamental_freq
+        self.filename = filename
         self._fft = None
         self._img = None
 
-        if isinstance(filename, str):
-            self.filename = filename
-        else:
-            try:
-                try:
-                    self.filename = "<file '{}'>".format(filename.name)
-                except:
-                    self.filename = "<file handle {}>".format(filename.fileno())
-            except:
-                self.filename = "<unknown file handle>"
-
-        if isinstance(filename, str):
-            if filename.endswith(".wav"):
-                self.wav = self.parse_wav(filename)
-            else:
-                from . import ffmpeg
-                probed = ffmpeg.ffprobe(filename)
-                converted = ffmpeg.file_to_buffer(filename)
-                self.wav = self.parse_raw(converted, 4, probed.sample_rate, probed.channels)
+        if is_wav(filename):
+            self.wav = self.parse_wav(filename)
         else:
             from . import ffmpeg
-            filename.seek(0)
             probed = ffmpeg.ffprobe(filename)
-            filename.seek(0)
-            converted = ffmpeg.buffer_to_buffer(filename)
-            self.wav = self.parse_raw(converted, 4, probed.sample_rate, probed.channels)
-
+            try:
+                stream = next(x for x in probed if x.codec_type == "audio")
+            except StopIteration:
+                raise complain.ComplainToUser(
+                    "There is no audio stream in the input file.")
+            if isinstance(filename, str):
+                converted = ffmpeg.file_to_buffer(stream)
+            else:
+                converted = ffmpeg.buffer_to_buffer(stream)
+            self.wav = self.parse_raw(
+                converted, 4, stream.sample_rate, stream.channels)
 
         max_amplitude = int(max(max(abs(min(chan)), abs(max(chan)))
                                 for chan in self.wav))
         self.volume = 256 ** 4 / (max_amplitude * 2) * volume
-        
+
     def parse_wav(self, filename):
         """Load a WAV file into a NumPy array."""
         try:
@@ -112,9 +114,10 @@ class Sample:
 
         wav = np.zeros((self.channels, self.length), dtype=self.size)
         for i in range(self.length):
-            frame = buf[framesize * i:framesize * (i+1)]
+            frame = buf[framesize * i:framesize * (i + 1)]
             for chan in range(self.channels):
-                wav[chan][i] = int.from_bytes(frame[self.sampwidth * chan:self.sampwidth * (chan + 1)], byteorder="little", signed=True)
+                wav[chan][i] = int.from_bytes(
+                    frame[self.sampwidth * chan:self.sampwidth * (chan + 1)], byteorder="little", signed=True)
         return wav
 
     @property

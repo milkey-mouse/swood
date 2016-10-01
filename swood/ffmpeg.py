@@ -137,7 +137,7 @@ else:
         print("Using ffmpeg from PATH ({})".format(ffmpeg_path))
         print("Using ffprobe from PATH ({})".format(ffprobe_path))
 
-class AudioInfo:
+class StreamInfo:
     def __getitem__(self, key):
         return vars(self)[key]
 
@@ -154,15 +154,17 @@ def ffprobe(filename):
     else:
         cmd = [ffprobe_path, "-show_streams", "-"]
         ffp_stdin = filename
-    ffprobe = subprocess.run(cmd, stdin=ffp_stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
-    ai = AudioInfo()
-    stream = False
+    ffprobe = subprocess.run(cmd, stdin=ffp_stdin, stdout=subprocess.PIPE, check=True)
+
+    ai = None
+    streams = []
     for line in ffprobe.stdout.decode("utf-8").replace("\r\n", "\n").split("\n"):
         if line == "[STREAM]":
-            stream = True
+            ai = StreamInfo()
         elif line == "[/STREAM]":
-            break
-        elif stream:
+            streams.append(ai)
+            ai = None
+        elif ai is not None:
             k, v = line.split("=")
             try:
                 ai[k] = int(v)
@@ -171,7 +173,7 @@ def ffprobe(filename):
                     ai[k] = float(v)
                 except ValueError:
                     ai[k] = v
-    return ai
+    return streams
 
 def run_ffmpeg(*args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=None, check=True, popen=False, **kwargs):
     cmd = list(args)
