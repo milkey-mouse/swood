@@ -163,8 +163,8 @@ class NoteRenderer:
                                                 self.sample.framerate, self.sample.channels)
 
             if pbar:
-                bar = tqdm(total=midi.notecount, dynamic_ncols=True,
-                           bar_format="{percentage:3.0f}% |{bar}| ETA: {remaining}")
+                bar = tqdm(total=midi.notecount, dynamic_ncols=True, desc="Rendering",
+                           bar_format="{l_bar}{bar}| ETA: {remaining}")
                 update = bar.update
 
             # "inlining" these variables can speed up the lookup, making it faster
@@ -225,9 +225,11 @@ class NoteRenderer:
             else:
                 output.save()
                 if wav_filename != filename:
-                    from . import ffmpeg
                     wav_filename.close()
-                    ffmpeg.file_to_file(wav_filename.name, filename)
+                    # convert to whatever other format the user wants
+                    from . import ffmpeg
+                    ffmpeg.AudioFile(wav_filename.name, in_format="wav").tofile(
+                        filename, "Exporting audio")
 
         finally:
             if wav_filename != filename:

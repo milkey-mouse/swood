@@ -134,6 +134,8 @@ Section "Uninstall"
   [% for file, destination in ib.install_files %]
     Delete "[[pjoin(destination, file)]]"
   [% endfor %]
+  Delete "$INSTDIR\ffmpeg.exe"
+  Delete "$INSTDIR\ffprobe.exe"
   ; Uninstall directories
   [% for dir, destination in ib.install_dirs %]
     RMDir /r "[[pjoin(destination, dir)]]"

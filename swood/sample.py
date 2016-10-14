@@ -45,16 +45,19 @@ class Sample:
             self.wav = self.parse_wav(filename)
         else:
             from . import ffmpeg
-            probed = ffmpeg.ffprobe(filename)
+            probed = ffmpeg.MediaInfo(filename).streams
             try:
                 stream = next(x for x in probed if x.codec_type == "audio")
             except StopIteration:
                 raise complain.ComplainToUser(
                     "There is no audio stream in the input file.")
-            if isinstance(filename, str):
-                converted = ffmpeg.file_to_buffer(stream)
-            else:
-                converted = ffmpeg.buffer_to_buffer(stream)
+            if not isinstance(filename, str):
+                try:
+                    filename.seek(0)
+                except:
+                    pass
+            converted = ffmpeg.AudioFile(filename, streams=stream,
+                                         out_format="s32le").tobuffer("Importing sample")
             self.wav = self.parse_raw(
                 converted, 4, stream.sample_rate, stream.channels)
 

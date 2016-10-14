@@ -9,7 +9,7 @@ def patch_tqdm(tqdm):
     # monkey-patch tqdm to not do fractional chars with 0-9; it looks ugly
     if "patched" not in vars(tqdm) or tqdm.patched == False:
         old_format_meter = tqdm.format_meter
-        fm_translation_table = dict.fromkeys(map(ord, string.digits), ord("#"))
+        fm_translation_table = dict.fromkeys(map(ord, string.digits), ord(" "))
 
         @staticmethod
         def patched_format_meter(*args, **kwargs):
