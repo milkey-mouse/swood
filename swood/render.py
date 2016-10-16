@@ -9,7 +9,7 @@ from numpy import zeros, full, asarray, resize, int32, int64
 from PIL import Image
 from tqdm import tqdm
 
-from . import wavout
+from . import wavout, ffmpeg
 
 from .__init__ import patch_tqdm
 
@@ -227,7 +227,6 @@ class NoteRenderer:
                 if wav_filename != filename:
                     wav_filename.close()
                     # convert to whatever other format the user wants
-                    from . import ffmpeg
                     ffmpeg.AudioFile(wav_filename.name, in_format="wav").tofile(
                         filename, "Exporting audio")
 

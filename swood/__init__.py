@@ -75,6 +75,12 @@ def run_cmd(argv=sys.argv[1:]):
 
     args = parser.parse_args(argv)
 
+    if args.infile == "-":
+        args.infile = sys.stdin.buffer
+
+    if args.outfile == "-":
+        args.outfile = sys.stdout.buffer
+
     from . import complain, midiparse, render, sample, soundfont
 
     with complain.ComplaintFormatter(version=version):

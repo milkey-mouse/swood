@@ -1,4 +1,4 @@
-from . import complain
+from . import complain, ffmpeg
 from PIL import Image
 import numpy as np
 import pyfftw
@@ -19,11 +19,9 @@ def is_wav(f):
     if isinstance(f, str):
         with open(f, "rb") as fobj:
             return is_wav(fobj)
-
-    riff = f.read(4) == b"RIFF"
-    f.read(4)
-    wave = f.read(4) == b"WAVE"
-    f.seek(0)
+    peeked = f.peek(12)
+    riff = peeked[:4] == b"RIFF"
+    wave = peeked[9:] == b"WAVE"
     return riff and wave
 
 
@@ -44,7 +42,6 @@ class Sample:
         if is_wav(filename):
             self.wav = self.parse_wav(filename)
         else:
-            from . import ffmpeg
             probed = ffmpeg.MediaInfo(filename).streams
             try:
                 stream = next(x for x in probed if x.codec_type == "audio")

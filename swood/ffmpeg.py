@@ -206,6 +206,8 @@ class FFmpegFile:
                         stderr_thread.join()
                         stdout_thread.join()
                         ffproc.terminate()
+                    if check == True and ffproc.returncode != 0:
+                        return subprocess.CalledProcessError(ffproc.returncode, ffproc.args, out_bytes)
                     return subprocess.CompletedProcess(ffproc.args, ffproc.returncode, stdout=out_bytes)
 
     def _download_ffmpeg(self, check_certs=True):
@@ -424,7 +426,7 @@ class AudioFile(FFmpegFile):
         if self._ffproc is not None:
             return self._ffproc
         elif mode == "r":
-            if self._is_buffer:   # TODO: this is incomplete
+            if self._is_buffer:
                 self._ffproc = self.run_ffmpeg(*self.in_format, "-i", "-",
                                                *self.out_format, *self.map, "-",
                                                stdin=self.name, stdout=subprocess.PIPE, popen=True)
@@ -482,12 +484,18 @@ class AudioFile(FFmpegFile):
 
 class VideoFile(FFmpegFile):
 
-    def __init__(self, filename, width=1920, height=1080, fps=30):
+    def __init__(self, filename, mode="r", streams=None, width=1920, height=1080, fps=30, format=None):
         super().__init__()
         self.fps = fps
         self.size = (width, height)
-        resolution = "{}x{}".format(*self.size)
         self._bytes_per_frame = width * height * 3
+        self._is_buffer = not isinstance(filename, str)
+        self.format = format
+        self._ffproc = None
+
+        self.video_format = ("-f", "rawvideo", "-pix_fmt", "rgb24",
+                             "-s:v", "{}x{}".format(*self.size), "-r", str(fps))
+
         if mode in ("r", "rb"):
             self.mode = "w"
         elif mode in ("w", "wb"):
@@ -495,16 +503,40 @@ class VideoFile(FFmpegFile):
         else:
             raise ValueError("invalid mode: '{}'".format(self.mode))
 
-        # # convert raw 24bpp RGB data to ffmpeg default format for file ext or vice versa
-        # # (raw because PIL has no encoders in the Windows precompiled installer)
-        # # convert file to raw data
-        #                          "rgb24", "-s:v", resolution, "-r",
-        #                          str(fps), "-", stdout=subprocess.PIPE, popen=True)
-        #                          str(fps), "-", stdout=subprocess.PIPE, popen=True)
-        # # convert raw data to file
-        #                          resolution, "-r", str(fps), "-i", "-",
-        #                          filename, stdin=subprocess.PIPE, popen=True)
-        #                          filename, stdin=subprocess.PIPE, popen=True)
+        if streams is None:
+            self.map = ()
+        elif isinstance(streams, (int, StreamInfo)):
+            self.map = ("-map", "0:{}".format(streams))
+        else:
+            self.map = tuple(chain.from_iterable(
+                ("-map", "0:" + str(x)) for x in streams))
+
+    @property
+    def ffproc(self):
+        # Lazy-load the FFmpeg process so we can do a direct
+        # transfer (via CLI args) if it's file-to-file or buffer-to-buffer
+        # convert raw 24bpp RGB data to ffmpeg default format for file ext or vice versa
+        # (raw because PIL has no encoders in the Windows precompiled installer)
+        if self._ffproc is not None:
+            return self._ffproc
+        elif mode == "r":
+            if self._is_buffer:   # TODO: this is incomplete
+                if self.format is None:
+                    raise ValueError("Must specify a format for buffer input")
+                self._ffproc = self.run_ffmpeg("-f", self.format, "-i", "-", *self.video_format,
+                                               *self.map, "-", stdin=self.name, stdout=subprocess.PIPE,
+                                               popen=True)
+            else:
+                self._ffproc = self.run_ffmpeg("-i", self.name, *self.video_format,
+                                               *self.map, "-", stdout=subprocess.PIPE, popen=True)
+        else:
+            if self._is_buffer:
+                self._ffproc = run_ffmpeg(*self.video_format, "-i", "-", *self.map, "-",
+                                          stdin=subprocess.PIPE, stdout=self.name, popen=True)
+            else:
+                self._ffproc = run_ffmpeg(*self.video_format, "-i", "-", *self.map,
+                                          self.name, stdin=subprocess.PIPE, popen=True)
+        return self._ffproc
 
     def write(self, im):
         if self.mode == "r":
