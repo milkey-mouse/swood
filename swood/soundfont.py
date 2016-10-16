@@ -58,9 +58,10 @@ class Instrument:
 class SoundFont:
     """Parses and holds information about .swood files."""
 
-    def __init__(self, filename, arguments, binsize=8192):
+    def __init__(self, filename, arguments, binsize=8192, pbar=True):
         self.arguments = arguments
         self._binsize = binsize
+        self.pbar = pbar
         self.load_instruments()
         self.samples = set()
         self.channels = {}
@@ -259,6 +260,7 @@ class SoundFont:
             loaded_samples[fn] = Sample(
                 self.wavpath(fn),
                 self._binsize,
+                pbar=self.pbar
             )
         self.add_samples(loaded_samples)
 
@@ -267,7 +269,8 @@ class SoundFont:
         for fn in self.samples:
             try:
                 with self.file.open(fn) as zipped_wav:
-                    loaded_samples[fn] = Sample(zipped_wav, self._binsize)
+                    loaded_samples[fn] = Sample(
+                        zipped_wav, self._binsize, pbar=self.pbar)
             except KeyError:  # file not found in zip
                 raise complain.ComplainToUser(
                     "Sample '{}' not found in config ZIP")
@@ -308,7 +311,7 @@ class SoundFont:
 
 
 def DefaultFont(samp):
-    sf = SoundFont(None, None)
+    sf = SoundFont(None, None, pbar=samp.pbar)
     sf.framerate = samp.framerate
     sf.channels = samp.channels
     sf.length = samp.length

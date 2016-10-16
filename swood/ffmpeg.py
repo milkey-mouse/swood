@@ -515,17 +515,18 @@ class VideoFile(FFmpegFile):
     def ffproc(self):
         # Lazy-load the FFmpeg process so we can do a direct
         # transfer (via CLI args) if it's file-to-file or buffer-to-buffer
+
         # convert raw 24bpp RGB data to ffmpeg default format for file ext or vice versa
         # (raw because PIL has no encoders in the Windows precompiled installer)
+
         if self._ffproc is not None:
             return self._ffproc
         elif mode == "r":
             if self._is_buffer:   # TODO: this is incomplete
                 if self.format is None:
                     raise ValueError("Must specify a format for buffer input")
-                self._ffproc = self.run_ffmpeg("-f", self.format, "-i", "-", *self.video_format,
-                                               *self.map, "-", stdin=self.name, stdout=subprocess.PIPE,
-                                               popen=True)
+                self._ffproc = self.run_ffmpeg("-f", self.format, "-i", "-", *self.video_format, *self.map,
+                                               "-", stdin=self.name, stdout=subprocess.PIPE, popen=True)
             else:
                 self._ffproc = self.run_ffmpeg("-i", self.name, *self.video_format,
                                                *self.map, "-", stdout=subprocess.PIPE, popen=True)

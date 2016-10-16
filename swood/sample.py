@@ -28,7 +28,7 @@ def is_wav(f):
 class Sample:
     """Reads and analyzes WAV files."""
 
-    def __init__(self, filename, binsize=8192, volume=0.9, fundamental_freq=None):
+    def __init__(self, filename, binsize=8192, volume=0.9, fundamental_freq=None, pbar=True):
         self.binsize = binsize
 
         if binsize < 2:
@@ -36,6 +36,7 @@ class Sample:
 
         self._fundamental_freq = fundamental_freq
         self.filename = filename
+        self.pbar = pbar
         self._fft = None
         self._img = None
 
@@ -54,7 +55,7 @@ class Sample:
                 except:
                     pass
             converted = ffmpeg.AudioFile(filename, streams=stream,
-                                         out_format="s32le").tobuffer("Importing sample")
+                                         out_format="s32le").tobuffer("Importing sample" if pbar else None)
             self.wav = self.parse_raw(
                 converted, 4, stream.sample_rate, stream.channels)
 

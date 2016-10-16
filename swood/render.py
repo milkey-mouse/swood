@@ -147,14 +147,7 @@ class NoteRenderer:
                         wav_filename = tempfile.NamedTemporaryFile(
                             delete=False)
                 else:
-                    try:
-                        if filename.name.endswith(".wav"):
-                            wav_filename = filename
-                        else:
-                            wav_filename = tempfile.NamedTemporaryFile(
-                                delete=False)
-                    except AttributeError:
-                        wav_filename = filename
+                    wav_filename = filename
             if savetype == FileSaveType.SMART_CACHING:
                 output = wavout.CachedWavFile(output_length, wav_filename,
                                               self.sample.framerate, self.sample.channels)
@@ -227,8 +220,13 @@ class NoteRenderer:
                 if wav_filename != filename:
                     wav_filename.close()
                     # convert to whatever other format the user wants
-                    ffmpeg.AudioFile(wav_filename.name, in_format="wav").tofile(
-                        filename, "Exporting audio")
+                    converted = ffmpeg.AudioFile(
+                        wav_filename.name, in_format="wav")
+                    if isinstance(filename, str):
+                        converted.tofile(
+                            filename, "Exporting audio" if pbar else None)
+                    else:
+                        raise NotImplementedError()
 
         finally:
             if wav_filename != filename:

@@ -78,8 +78,9 @@ def run_cmd(argv=sys.argv[1:]):
     if args.infile == "-":
         args.infile = sys.stdin.buffer
 
-    if args.outfile == "-":
-        args.outfile = sys.stdout.buffer
+    if args.output == "-":
+        args.output = sys.stdout.buffer
+        args.no_pbar = False
 
     from . import complain, midiparse, render, sample, soundfont
 
@@ -87,12 +88,12 @@ def run_cmd(argv=sys.argv[1:]):
         if sample.is_wav(args.infile):
             # load wav file natively
             sample = soundfont.DefaultFont(
-                sample.Sample(args.infile, args.binsize))
+                sample.Sample(args.infile, args.binsize, pbar=args.no_pbar))
         elif "." in args.infile and args.infile.split(".")[-1] in ("swood", "ini", "txt", ".soundfont"):
             # it's a known soundfont extension, so load it as such
             config_options = {}
             sample = soundfont.SoundFont(
-                args.infile, config_options, binsize=args.binsize)
+                args.infile, config_options, binsize=args.binsize, pbar=args.no_pbar)
             # ensure cli args take precedence over config
             # by only changing arguments currently at their default
             for name, value in config_options.items():
@@ -104,7 +105,7 @@ def run_cmd(argv=sys.argv[1:]):
         else:
             # use ffmpeg to convert to a supported format
             sample = soundfont.DefaultFont(
-                sample.Sample(args.infile, args.binsize))
+                sample.Sample(args.infile, args.binsize, pbar=args.no_pbar))
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)

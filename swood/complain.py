@@ -73,8 +73,8 @@ class ComplaintFormatter:
             others_cutoff = next(idx for idx, fs in enumerate(scrubbed_stack) if os.path.samefile(
                 os.path.dirname(fs.filename), os.path.dirname(__file__)))
             scrubbed_stack = scrubbed_stack[others_cutoff:]
-            # rewrite paths so they contain only relative directories (hides
-            # username on Windows)
+            # rewrite paths so they contain only relative directories
+            # (hides username on Windows and Linux)
             dirstart = os.path.abspath(
                 os.path.join(os.path.dirname(__file__), ".."))
             for fs in scrubbed_stack:

@@ -58,25 +58,29 @@ class UncachedWavFile:
                 "Can't save output file '{}'.".format(self.filename))
 
 
-def CachedWavFile(*args, **kwargs):
-    """Tries to create a MemMapWavFile and falls back to ChunkedWavFile."""
+def CachedWavFile(length, filename, framerate, channels=1, dtype=int32):
+    """Automatically creates the best of MemMapWavFile, ChunkedWavFile, and StreamingWavFile for the specified input."""
 
-    # Windows doesn't like mmap'ing as non-admin
+    if isinstance(filename, str) or "seek" in vars(filename):
+        chunked = ChunkedWavFile
+    else:
+        chunked = StreamingWavFile
+
     if os.name == "nt":
+        # Windows doesn't like mmap'ing as non-admin
         try:
             import ctypes
             if ctypes.windll.shell32.IsUserAnAdmin() == 0:
-                return ChunkedWavFile(*args, **kwargs)
+                return chunked(length, filename, framerate, channels=channels, dtype=dtype)
         except:
             pass
-
     try:
-        return MemMapWavFile(*args, **kwargs)
+        return MemMapWavFile(length, filename, framerate, channels=channels, dtype=dtype)
     except PermissionError:
-        return ChunkedWavFile(*args, **kwargs)
+        return chunked(length, filename, framerate, channels=channels, dtype=dtype)
     except Exception as e:
         # Probably has more obscure errors here so just ignore them
-        return ChunkedWavFile(*args, **kwargs)  # shh bby is ok
+        return chunked(length, filename, framerate, channels=channels, dtype=dtype)
 
 
 class MemMapWavFile:
@@ -150,7 +154,7 @@ class defaultdictkey(defaultdict):
 class ChunkedWavFile:
     """Uses chunks of data to efficiently write a WAV file to disk without storing a large array."""
 
-    def __init__(self, length, filename, framerate, channels=1, chunksize=32768, dtype=int32):
+    def __init__(self, length, filename, framerate, channels=1, dtype=int32, chunksize=32768):
         # 32768 chunk size holds ~1/6 second at 192khz
         # and ~0.75 seconds at 44.1khz (cd quality)
         self.framerate = framerate
@@ -175,9 +179,12 @@ class ChunkedWavFile:
         self.wav.close = lambda: None
         self.wav.initfp(self.wavfile)
 
+        # this used to write the header at 0 length and patch it later with the
+        # correct information but StreamingWavFile needs the header to be accurate
+        # as it never seeks (for stdout, etc.)
         self.wav.setparams((channels, self.itemsize, self.framerate,
                             0, "NONE", "not compressed"))
-        self.wav._write_header(0)  # start at 0 length and patch header later
+        self.wav._write_header(0)
         self._header_length = self.wavfile.tell()
 
     def _create_chunk(self, key):
@@ -189,7 +196,7 @@ class ChunkedWavFile:
 
     def _load_chunk(self, idx):
         """Load a chunk from disk into the cache."""
-        raise NotImplementedError  # not needed for linear writes and it's broken
+        raise NotImplementedError()  # not needed for linear writes and it's broken
         self.saved_to_disk.discard(idx)
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
         raw_data = fromfile(self.wavfile, dtype=self.dtype,
@@ -284,3 +291,23 @@ class ChunkedWavFile:
         self.wav._patchheader()
         if self._auto_close:
             self.wavfile.close()
+
+
+class StreamingWavFile(ChunkedWavFile):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_written_chunk = 0
+
+    def save(self):
+        if self._auto_close:
+            self.wavfile.close()
+
+    def flush_cache(self, to_idx=None):
+        max_chunk = max(self.chunks.keys())
+        for idx in range(self.last_written_chunk + 1, max_chunk + 1):
+            # because self.chunks is a defaultdict (technically defaultdictkey)
+            # it automatically creates chunks full of zeros when one is missing
+            self.chunks[idx].flatten(order="F").tofile(self.wavfile)
+            del self.chunks[idx]
+        self.last_written_chunk = max_chunk
