@@ -4,6 +4,7 @@ from collections import defaultdict
 from . import complain
 import mmap
 import wave
+import sys
 import os
 
 
@@ -183,8 +184,8 @@ class ChunkedWavFile:
         # correct information but StreamingWavFile needs the header to be accurate
         # as it never seeks (for stdout, etc.)
         self.wav.setparams((channels, self.itemsize, self.framerate,
-                            0, "NONE", "not compressed"))
-        self.wav._write_header(0)
+                            length, "NONE", "not compressed"))
+        self.wav._write_header(length)
         self._header_length = self.wavfile.tell()
 
     def _create_chunk(self, key):
@@ -298,16 +299,20 @@ class StreamingWavFile(ChunkedWavFile):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.last_written_chunk = 0
+        del self.wav
 
     def save(self):
+        self.flush_cache()
         if self._auto_close:
             self.wavfile.close()
 
     def flush_cache(self, to_idx=None):
-        max_chunk = max(self.chunks.keys())
-        for idx in range(self.last_written_chunk + 1, max_chunk + 1):
+        if to_idx is None:
+            to_idx = max(self.chunks.keys()) + 1
+        for idx in range(self.last_written_chunk, to_idx):
             # because self.chunks is a defaultdict (technically defaultdictkey)
             # it automatically creates chunks full of zeros when one is missing
+            # print("writing chunk {}".format(idx), file=sys.stderr)
             self.chunks[idx].flatten(order="F").tofile(self.wavfile)
             del self.chunks[idx]
-        self.last_written_chunk = max_chunk
+        self.last_written_chunk = to_idx

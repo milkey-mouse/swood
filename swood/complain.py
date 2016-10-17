@@ -63,7 +63,7 @@ class ComplaintFormatter:
 
     def __exit__(self, exc_type, exc, tb):
         if isinstance(exc, ComplainToUser):
-            print("Error: {}".format(exc))
+            print("Error: {}".format(exc), file=sys.stderr)
             sys.exit(1)
         elif isinstance(exc, Exception):
             # scrub stack of full path names for extra privacy
@@ -89,30 +89,31 @@ class ComplaintFormatter:
 
             if "--optout" in sys.argv or "-o" in sys.argv:
                 print(
-                    "Something went wrong. A bug report will not be sent because of your command-line flag.")
+                    "Something went wrong. A bug report will not be sent because of your command-line flag.", file=sys.stderr)
                 return False
             elif os.environ.get("SWOOD_OPTOUT") == "1":
                 print(
-                    "Something went wrong. A bug report will not be sent because of your environment variable.")
+                    "Something went wrong. A bug report will not be sent because of your environment variable.", file=sys.stderr)
                 return False
             elif not can_submit():
                 print(
-                    "Something went wrong. A bug report will not be sent because of your config setting.")
+                    "Something went wrong. A bug report will not be sent because of your config setting.", file=sys.stderr)
                 return False
             else:
                 print(
-                    "Something went wrong. A bug report will be sent to help figure it out. (see --optout)")
+                    "Something went wrong. A bug report will be sent to help figure it out. (see --optout)", file=sys.stderr)
                 try:
                     conn = http.client.HTTPSConnection("meme.institute")
                     conn.request("POST", "/swood/bugs/submit", str_tb)
                     resp = conn.getresponse().read().decode("utf-8")
                     if resp == "done":
-                        print("New bug submitted!")
+                        print("New bug submitted!", file=sys.stderr)
                     elif resp == "dupe":
-                        print("This bug is already in the queue to be fixed.")
+                        print(
+                            "This bug is already in the queue to be fixed.", file=sys.stderr)
                     else:
                         raise Exception
                 except Exception:
-                    print("Submission of bug report failed.")
+                    print("Submission of bug report failed.", file=sys.stderr)
                     traceback.print_exc()
         return True

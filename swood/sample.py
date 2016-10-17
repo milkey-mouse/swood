@@ -19,9 +19,10 @@ def is_wav(f):
     if isinstance(f, str):
         with open(f, "rb") as fobj:
             return is_wav(fobj)
-    peeked = f.peek(12)
-    riff = peeked[:4] == b"RIFF"
-    wave = peeked[9:] == b"WAVE"
+    riff = f.read(4) == b"RIFF"
+    f.read(4)
+    wave = f.read(4) == b"WAVE"
+    f.seek(-12, 1)
     return riff and wave
 
 
@@ -40,7 +41,7 @@ class Sample:
         self._fft = None
         self._img = None
 
-        if is_wav(filename):
+        if (isinstance(filename, str) and filename.endswith(".wav")) or is_wav(filename):
             self.wav = self.parse_wav(filename)
         else:
             probed = ffmpeg.MediaInfo(filename).streams
@@ -126,8 +127,7 @@ class Sample:
         """Run a Fast Fourier Transform on the WAV file to create a histogram of frequencies and amplitudes."""
         if not self._fft:
             if self.binsize % 2 != 0:
-                print(
-                    "Warning: Bin size must be a multiple of 2, correcting automatically")
+                # bin size must be even
                 self.binsize += 1
             spacing = float(self.framerate) / self.binsize
             avgdata = np.zeros(self.binsize // 2, dtype=np.float64)
@@ -143,8 +143,8 @@ class Sample:
                     del data
                     del fft
             if max(avgdata) == 0:
-                print(
-                    "Warning: Bin size is too large to analyze sample; dividing by 2 and trying again")
+                # these warnings aren't as useful to the user
+                # print("Warning: Bin size is too large to analyze sample; dividing by 2 and trying again", file=sys.stderr)
                 self.binsize = self.binsize // 2
                 self._fft = self.fft
             else:

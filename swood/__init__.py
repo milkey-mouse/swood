@@ -63,7 +63,7 @@ def run_cmd(argv=sys.argv[1:]):
                         help="FFT bin size; lower numbers make it faster but more off-pitch")
     parser.add_argument("--fullclip", "-f", action="store_true",
                         help="always use the full sample without cropping")
-    parser.add_argument("--no-pbar", "-p", action="store_false",
+    parser.add_argument("--no-pbar", "-p", action="store_false", dest="pbar",
                         help=argparse.SUPPRESS)
 
     version = version_info()
@@ -80,7 +80,8 @@ def run_cmd(argv=sys.argv[1:]):
 
     if args.output == "-":
         args.output = sys.stdout.buffer
-        args.no_pbar = False
+        sys.stdout = open(os.devnull, "w")
+        # args.pbar = False
 
     from . import complain, midiparse, render, sample, soundfont
 
@@ -88,12 +89,12 @@ def run_cmd(argv=sys.argv[1:]):
         if sample.is_wav(args.infile):
             # load wav file natively
             sample = soundfont.DefaultFont(
-                sample.Sample(args.infile, args.binsize, pbar=args.no_pbar))
+                sample.Sample(args.infile, args.binsize, pbar=args.pbar))
         elif "." in args.infile and args.infile.split(".")[-1] in ("swood", "ini", "txt", ".soundfont"):
             # it's a known soundfont extension, so load it as such
             config_options = {}
             sample = soundfont.SoundFont(
-                args.infile, config_options, binsize=args.binsize, pbar=args.no_pbar)
+                args.infile, config_options, binsize=args.binsize, pbar=args.pbar)
             # ensure cli args take precedence over config
             # by only changing arguments currently at their default
             for name, value in config_options.items():
@@ -105,11 +106,11 @@ def run_cmd(argv=sys.argv[1:]):
         else:
             # use ffmpeg to convert to a supported format
             sample = soundfont.DefaultFont(
-                sample.Sample(args.infile, args.binsize, pbar=args.no_pbar))
+                sample.Sample(args.infile, args.binsize, pbar=args.pbar))
         midi = midiparse.MIDIParser(
             args.midi, sample, args.transpose, args.speed)
         renderer = render.NoteRenderer(sample, args.fullclip, args.cachesize)
-        renderer.render(midi, args.output, pbar=args.no_pbar)
+        renderer.render(midi, args.output, pbar=args.pbar)
 
 
 if __name__ == "__main__":

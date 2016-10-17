@@ -176,7 +176,7 @@ class FFmpegFile:
             ff_stderr = subprocess.DEVNULL
 
         if self.show_debug:
-            print(" ".join(cmd))
+            print(" ".join(cmd), file=sys.stderr)
 
         if popen:
             return subprocess.Popen(cmd, stdin=stdin, stdout=stdout, stderr=ff_stderr, **kwargs)
@@ -256,12 +256,15 @@ class FFmpegFile:
                                 break
                     break
                 except ssl.SSLError:
-                    print("The SSL certificate for the server is invalid.")
-                    print("Someone might be doing something malicious!")
+                    print("The SSL certificate for the server is invalid.",
+                          file=sys.stderr)
+                    print("Someone might be doing something malicious!",
+                          file=sys.stderr)
                     download_insecurely = None
                     while download_insecurely is None:
-                        r = input(
-                            "Do you still want to download FFmpeg insecurely? (Y/N): ").lower()
+                        print(
+                            "Do you still want to download FFmpeg insecurely? (Y/N): ", file=sys.stderr)
+                        r = input().lower()
                         if r in ("yes", "y", "true", "1"):
                             download_insecurely = True
                         elif r in ("no", "n", "false", "0"):
@@ -357,7 +360,7 @@ class MediaInfo(FFmpegFile):
         ai = None
         self.streams = []
         if self.show_debug:
-            print(ffprobe.stdout.decode("utf-8"))
+            print(ffprobe.stdout.decode("utf-8"), file=sys.stderr)
         for line in ffprobe.stdout.decode("utf-8").replace("\r\n", "\n").split("\n"):
             if line == "[STREAM]":
                 ai = StreamInfo()
@@ -388,7 +391,8 @@ class AudioFile(FFmpegFile):
 
         if self._is_buffer:
             if in_format is None:
-                raise ValueError("Must specify in_format for a stream input")
+                raise ValueError(
+                    "Must specify in_format for a stream input")
             else:
                 self.in_format = ("-f", in_format)
         else:
@@ -396,7 +400,8 @@ class AudioFile(FFmpegFile):
                 self.in_format = ()
             else:
                 if self.show_debug:
-                    print("Warning: Stream format specified for file input")
+                    print(
+                        "Warning: Stream format specified for file input", file=sys.stderr)
                 self.in_format = ("-f", in_format)
 
         if out_format is None:

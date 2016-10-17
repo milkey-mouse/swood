@@ -90,7 +90,7 @@ class MIDIParser:
                                          percussion=True))
                             except KeyError:
                                 print(
-                                    "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note))
+                                    "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note), file=sys.stderr)
                         else:
                             instrument = self.channel_instruments[
                                 message.channel]
@@ -108,7 +108,7 @@ class MIDIParser:
                             note = playing[message.note].pop()
                         except IndexError:  # the pop will fail if there aren't any matching notes playing
                             print(
-                                "Warning: Note end event with no matching begin event @ {}".format(time))
+                                "Warning: Note end event with no matching begin event @ {}".format(time), file=sys.stderr)
                         if len(playing[message.note]) == 0:
                             del playing[message.note]
                         note.finalize(time_samples)
@@ -119,7 +119,8 @@ class MIDIParser:
                         self.channel_instruments[message.channel] = \
                             sample.instruments[message.program + 1][0]
                 if len(playing) != 0:
-                    print("Warning: The MIDI ended with notes still playing.")
+                    print(
+                        "Warning: The MIDI ended with notes still playing.", file=sys.stderr)
                     for notelist in playing.values():
                         for note in notelist:
                             note.length = int(
@@ -163,13 +164,13 @@ class LiveMIDIParser:
                         self.buffer
                     except KeyError:
                         print(
-                            "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note))
+                            "Warning: Percussion note number outside typical 35-81 range: {}".format(message.note), file=sys.stderr)
             elif message.type == "note_off":
                 try:
                     note = playing[message.note].pop()
                 except IndexError:  # the pop will fail if there aren't any matching notes playing
                     print(
-                        "Warning: Note end event with no matching begin event @ {}".format(time))
+                        "Warning: Note end event with no matching begin event @ {}".format(time), file=sys.stderr)
                 if len(playing[message.note]) == 0:
                     del playing[message.note]
                 # now stop the note in the compositor

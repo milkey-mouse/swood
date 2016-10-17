@@ -200,7 +200,7 @@ class SoundFont:
                             instrument.volume = int(value) / 100
                             if instrument.volume > 0.95:
                                 print(
-                                    "Warning: Volumes higher than 95 may cause clipping or other glitches")
+                                    "Warning: Volumes higher than 95 may cause clipping or other glitches", file=sys.stderr)
                         except ValueError:
                             raise SoundFontSyntaxError(
                                 linenum, raw_text, "'{}' is not a valid number".format(value))
@@ -303,7 +303,8 @@ class SoundFont:
                     if instrument.pan != 0.5:
                         instrument.pan = 0.5
                         if not warned_pan:
-                            print("Warning: Audio has >2 channels; pan ignored")
+                            print(
+                                "Warning: Audio has >2 channels; pan ignored", file=sys.stderr)
                             warned_pan = True
 
     def __len__(self):
