@@ -128,6 +128,7 @@ class NoteRenderer:
 
         if savetype != FileSaveType.ARRAY_IN_MEM and filename is None:
             return ValueError("When not outputting to an array in memory, you need to specify a filename.")
+
         if self.fullclip:
             # leave a small buffer at the end with space for one more sample
             output_length = midi.length + \
@@ -136,103 +137,80 @@ class NoteRenderer:
             # it has to cut off sounds at the threshold anyway
             output_length = midi.length + self.threshold
 
-        try:
-            if savetype == FileSaveType.ARRAY_IN_MEM:
-                wav_filename = filename
-            else:
-                if isinstance(filename, str):
-                    if filename.endswith(".wav"):
-                        wav_filename = filename
-                    else:
-                        wav_filename = tempfile.NamedTemporaryFile(
-                            delete=False)
+        if savetype == FileSaveType.ARRAY_IN_MEM or (isinstance(filename, str) and filename.endswith(".wav")):
+            wav_filename = filename
+        else:
+            wav_filename = ffmpeg.AudioFile(filename, "w", in_format="wav")
+
+        if savetype == FileSaveType.SMART_CACHING:
+            output = wavout.CachedWavFile(output_length, wav_filename,
+                                          self.sample.framerate, self.sample.channels)
+        else:
+            output = wavout.UncachedWavFile(output_length, wav_filename,
+                                            self.sample.framerate, self.sample.channels)
+
+        if isinstance(wav_filename, ffmpeg.AudioFile):
+            output._auto_close = True
+
+        if pbar:
+            bar = tqdm(total=midi.notecount, dynamic_ncols=True, desc="Rendering",
+                       bar_format="{l_bar}{bar}| ETA: {remaining}")
+            update = bar.update
+
+        # "inlining" these variables can speed up the lookup, making it faster
+        # see https://stackoverflow.com/questions/37202463
+        caching = self.cachesize > 0
+        add_data = output.add_data
+        maxvolume = midi.maxvolume
+        cachesize = self.cachesize
+
+        if caching:
+            tick = 8
+            notecache = self.notecache
+
+        for time, notes in midi.notes:
+            for note in notes:
+                if note in notecache:
+                    rendered_note = notecache[note]
+                    rendered_note.used += 1  # increment the used counter each time for the "GC" below
                 else:
-                    wav_filename = filename
-            if savetype == FileSaveType.SMART_CACHING:
-                output = wavout.CachedWavFile(output_length, wav_filename,
-                                              self.sample.framerate, self.sample.channels)
-            else:
-                output = wavout.UncachedWavFile(output_length, wav_filename,
-                                                self.sample.framerate, self.sample.channels)
-
-            if pbar:
-                bar = tqdm(total=midi.notecount, dynamic_ncols=True, desc="Rendering",
-                           bar_format="{l_bar}{bar}| ETA: {remaining}")
-                update = bar.update
-
-            # "inlining" these variables can speed up the lookup, making it faster
-            # see https://stackoverflow.com/questions/37202463
-            caching = self.cachesize > 0
-            add_data = output.add_data
-            maxvolume = midi.maxvolume
-            cachesize = self.cachesize
+                    rendered_note = CachedNote(
+                        time, *self.render_note(note))
+                    notecache[note] = rendered_note
+                if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
+                    if note.instrument.pan == 0.5:
+                        add_data(time, rendered_note.data *
+                                 (note.volume / midi.maxvolume *
+                                     note.instrument.volume),
+                                 rendered_note.cutoffs)
+                    else:
+                        add_data(time, rendered_note.data *
+                                 (note.volume / midi.maxvolume *
+                                     note.instrument.volume),
+                                 rendered_note.cutoffs,
+                                 ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
+                if pbar:
+                    update()
 
             if caching:
-                tick = 8
-                notecache = self.notecache
+                # cache "garbage collection":
+                # if a CachedNote is more than <cachesize> seconds old and not
+                # used >2 times it removes it from the cache to save
+                # mem(e)ory
+                tick += 1
+                if tick == 15:
+                    tick = 0
+                    for k in list(notecache.keys()):
+                        if time - notecache[k].length > cachesize and notecache[k].used < 3:
+                            del notecache[k]
 
-            for time, notes in midi.notes:
-                for note in notes:
-                    if note in notecache:
-                        rendered_note = notecache[note]
-                        rendered_note.used += 1  # increment the used counter each time for the "GC" below
-                    else:
-                        rendered_note = CachedNote(
-                            time, *self.render_note(note))
-                        notecache[note] = rendered_note
-                    if rendered_note.data is not None and rendered_note.data.shape[0] != 0:
-                        if note.instrument.pan == 0.5:
-                            add_data(time, rendered_note.data *
-                                     (note.volume / midi.maxvolume *
-                                      note.instrument.volume),
-                                     rendered_note.cutoffs)
-                        else:
-                            add_data(time, rendered_note.data *
-                                     (note.volume / midi.maxvolume *
-                                      note.instrument.volume),
-                                     rendered_note.cutoffs,
-                                     ((1 - note.instrument.pan) * 2, note.instrument.pan * 2))
-                    if pbar:
-                        update()
+        if pbar:
+            bar.close()
 
-                if caching:
-                    # cache "garbage collection":
-                    # if a CachedNote is more than <cachesize> seconds old and not
-                    # used >2 times it removes it from the cache to save
-                    # mem(e)ory
-                    tick += 1
-                    if tick == 15:
-                        tick = 0
-                        for k in list(notecache.keys()):
-                            if time - notecache[k].length > cachesize and notecache[k].used < 3:
-                                del notecache[k]
+        if caching and clear_cache:
+            notecache.clear()
 
-            if pbar:
-                bar.close()
-
-            if caching and clear_cache:
-                notecache.clear()
-
-            if savetype == FileSaveType.ARRAY_IN_MEM:
-                return output.channels
-            else:
-                output.save()
-                if wav_filename != filename:
-                    wav_filename.close()
-                    # convert to whatever other format the user wants
-                    converted = ffmpeg.AudioFile(
-                        wav_filename.name, in_format="wav")
-                    if isinstance(filename, str):
-                        converted.tofile(
-                            filename, "Exporting audio" if pbar else None)
-                    else:
-                        raise NotImplementedError()
-
-        finally:
-            if wav_filename != filename:
-                # there is a temp file for the wav, let's delete it
-                try:
-                    wav_filename.close()
-                finally:
-                    if os.path.isfile(wav_filename.name):
-                        os.remove(wav_filename.name)
+        if savetype == FileSaveType.ARRAY_IN_MEM:
+            return output.channels
+        else:
+            output.save()

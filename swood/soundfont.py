@@ -210,7 +210,7 @@ class SoundFont:
                             pan = float(value)
                             if pan < 0 or pan > 1:
                                 raise SoundFontSyntaxError(
-                                    linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range".format(value))
+                                    linenum, raw_text, "'{}' is outside of the allowed 0.0-1.0 range for pan".format(value))
                             else:
                                 instrument.pan = pan
                         except ValueError:

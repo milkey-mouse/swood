@@ -5,6 +5,7 @@ from . import complain
 import mmap
 import wave
 import sys
+import io
 import os
 
 
@@ -58,6 +59,16 @@ class UncachedWavFile:
             raise complain.ComplainToUser(
                 "Can't save output file '{}'.".format(self.filename))
 
+    def close(self):
+        self.save()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.save()
+        return False
+
 
 def CachedWavFile(length, filename, framerate, channels=1, dtype=int32):
     """Automatically creates the best of MemMapWavFile, ChunkedWavFile, and StreamingWavFile for the specified input."""
@@ -84,7 +95,7 @@ def CachedWavFile(length, filename, framerate, channels=1, dtype=int32):
         return chunked(length, filename, framerate, channels=channels, dtype=dtype)
 
 
-class MemMapWavFile:
+class MemMapWavFile(UncachedWavFile):
     """Uses memory mapped arrays to easily cache WAV files."""
 
     def __init__(self, length, filename, framerate, channels=1, dtype=int32):
@@ -97,7 +108,7 @@ class MemMapWavFile:
             self.wavfile = filename
             self._auto_close = False
 
-        wav = wave.Wave_write(self)
+        wav = wave.Wave_write(None)
         wav.close = lambda: None
         wav.initfp(self.wavfile)
         wav.setparams((channels, dtype_info(dtype).itemsize,
@@ -113,35 +124,20 @@ class MemMapWavFile:
         self.framerate = framerate
         self.filename = filename
 
-    def add_data(self, start, data, cutoffs=None, volumes=None):
-        """Add sound data at a specified position.
-
-        Args:
-            start: How many samples into the output the data should start.
-            data: A NumPy array of data to add to the output.
-            cutoffs: An array of integers that specifies where to cut off each channel. (optional)
-            volumes: An array of floats to multiply each channel's data by. (optional)
-        """
-        if cutoffs is None:
-            cutoffs = full(self.channels.shape[0],
-                           data.shape[1], dtype=int32)
-        for chan in range(self.channels.shape[0]):
-            selectChan = min(chan, data.shape[0])
-            length = min(self.channels.shape[1] - start,
-                         cutoffs[selectChan],
-                         data.shape[1])
-            if volumes is None:
-                self.channels[chan][start:start + length] += \
-                    data[selectChan][:length].astype(self.channels.dtype)
-            else:
-                self.channels[chan][start:start + length] += \
-                    data[selectChan][:length].astype(self.channels.dtype) * \
-                    volumes[selectChan]
-
     def save(self):
         del self.wav_mmap  # the way to close a memmap is to delete it
         if self._auto_close:
             self.wavfile.close()
+
+    def close(self):
+        self.save()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.save()
+        return False
 
 
 class defaultdictkey(defaultdict):
@@ -176,17 +172,18 @@ class ChunkedWavFile:
             self.wavfile = filename
             self._auto_close = False
 
-        self.wav = wave.Wave_write(self)
+        self.wav = wave.Wave_write(None)
         self.wav.close = lambda: None
         self.wav.initfp(self.wavfile)
 
         # this used to write the header at 0 length and patch it later with the
         # correct information but StreamingWavFile needs the header to be accurate
         # as it never seeks (for stdout, etc.)
+
         self.wav.setparams((channels, self.itemsize, self.framerate,
                             length, "NONE", "not compressed"))
         self.wav._write_header(length)
-        self._header_length = self.wavfile.tell()
+        self._header_length = 44  # self.wavfile.tell()
 
     def _create_chunk(self, key):
         """Create a new chunk filled with zeros, or load one from disk."""
@@ -207,7 +204,12 @@ class ChunkedWavFile:
     def _save_chunk(self, idx):
         """Write a chunk to disk and remove it from the cache."""
         self.wavfile.seek(self._header_length + (self.chunkspacing * idx))
-        self.chunks[idx].flatten(order="F").tofile(self.wavfile)
+
+        if "fileno" in vars(self.wavfile):
+            self.chunks[idx].flatten(order="F").tofile(self.wavfile)
+        else:
+            self.wavfile.write(self.chunks[idx].flatten(order="F").tobytes())
+
         self.saved_to_disk.add(idx)
         del self.chunks[idx]
 
@@ -293,6 +295,16 @@ class ChunkedWavFile:
         if self._auto_close:
             self.wavfile.close()
 
+    def close(self):
+        self.save()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.save()
+        return False
+
 
 class StreamingWavFile(ChunkedWavFile):
 
@@ -313,6 +325,10 @@ class StreamingWavFile(ChunkedWavFile):
             # because self.chunks is a defaultdict (technically defaultdictkey)
             # it automatically creates chunks full of zeros when one is missing
             # print("writing chunk {}".format(idx), file=sys.stderr)
-            self.chunks[idx].flatten(order="F").tofile(self.wavfile)
+            if "fileno" in vars(self.wavfile):
+                self.chunks[idx].flatten(order="F").tofile(self.wavfile)
+            else:
+                self.wavfile.write(
+                    self.chunks[idx].flatten(order="F").tobytes())
             del self.chunks[idx]
         self.last_written_chunk = to_idx

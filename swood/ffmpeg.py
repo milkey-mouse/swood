@@ -430,7 +430,7 @@ class AudioFile(FFmpegFile):
         # transfer (via CLI args) if it's file-to-file or buffer-to-buffer
         if self._ffproc is not None:
             return self._ffproc
-        elif mode == "r":
+        elif self.mode == "r":
             if self._is_buffer:
                 self._ffproc = self.run_ffmpeg(*self.in_format, "-i", "-",
                                                *self.out_format, *self.map, "-",
@@ -462,6 +462,17 @@ class AudioFile(FFmpegFile):
         else:
             self.ffproc.stdin.write(buf)
 
+    def flush(self):
+        try:
+            if self._ffproc is not None and self.ffproc.poll() is None:
+                self.ffproc.stdin.flush()
+        except:
+            pass
+
+    def close(self):
+        if self._ffproc is not None and self.ffproc.poll() is None:
+            self._safe_close(self.ffproc)
+
     def tofile(self, filename, desc=None):
         if self.mode == "w":
             return io.UnsupportedOperation("not readable")
@@ -485,6 +496,13 @@ class AudioFile(FFmpegFile):
             return self.run_ffmpeg(*self.in_format, "-i", self.name,
                                    *self.out_format, *self.map, "-",
                                    stdout=subprocess.PIPE, desc=desc).stdout
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
 
 
 class VideoFile(FFmpegFile):
@@ -526,8 +544,8 @@ class VideoFile(FFmpegFile):
 
         if self._ffproc is not None:
             return self._ffproc
-        elif mode == "r":
-            if self._is_buffer:   # TODO: this is incomplete
+        elif self.mode == "r":
+            if self._is_buffer:
                 if self.format is None:
                     raise ValueError("Must specify a format for buffer input")
                 self._ffproc = self.run_ffmpeg("-f", self.format, "-i", "-", *self.video_format, *self.map,
@@ -573,4 +591,4 @@ class VideoFile(FFmpegFile):
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
-        return True
+        return False
