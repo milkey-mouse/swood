@@ -3,6 +3,7 @@
 from copy import copy
 import collections
 import operator
+import sys
 
 import mido
 
